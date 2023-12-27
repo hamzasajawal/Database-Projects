@@ -1,0 +1,470 @@
+
+ORACLE FDW ON ALMALINUX 8 CONFIGURATION AND INSTALLATION:
+
+Foreign Data Wrappers (FDWs) are extensions in PostgreSQL that allow data to be accessed from external sources, 
+such as other database management systems. When using FDWs to access data from Oracle in PostgreSQL, the following steps typically occur:
+
+    
+-Install the Oracle FDW extension in PostgreSQL: First, you need to install the Oracle FDW extension in PostgreSQL. 
+This extension enables communication between PostgreSQL and Oracle.
+
+-Configure the Oracle FDW extension: After installing the extension, you need to configure it by 
+setting up the connection parameters for the Oracle database. This involves specifying the host, port, 
+database name, user name, and password for the Oracle database.
+
+-Create a foreign server: In PostgreSQL, you need to create a foreign server that represents the Oracle database.
+This involves defining the server name and specifying the Oracle FDW extension as the server type.
+
+-Define foreign tables: Once the foreign server is created, you can define foreign tables in PostgreSQL 
+that map to tables in the Oracle database. This involves specifying the table name, schema, and columns in PostgreSQL 
+that correspond to the corresponding table in Oracle.
+
+-Query the foreign tables: With the foreign tables defined, you can query them as if they were regular tables in PostgreSQL. 
+When a query is executed, the Oracle FDW extension retrieves the data from the 
+Oracle database and returns it to PostgreSQL for further processing.
+
+-Overall, FDWs provide a powerful mechanism for integrating data from external sources into PostgreSQL, 
+allowing you to leverage the strengths of different database management systems for your specific use case
+
+==================================================================================================================================================
+Download Oracle instant client from https://yum.oracle.com/repo/OracleLinux/OL7/oracle/instantclient/x86_64/index.html
+
+And load into server and then install as below:
+
+postgres@localhost tmp]$ sudo yum localinstall oracle-instantclient18.3-*
+
+We trust you have received the usual lecture from the local System
+Administrator. It usually boils down to these three things:
+
+    #1) Respect the privacy of others.
+    #2) Think before you type.
+    #3) With great power comes great responsibility.
+
+[sudo] password for postgres:
+Last metadata expiration check: 1:16:55 ago on Sat 08 Apr 2023 01:13:40 PM PKT.
+Dependencies resolved.
+===================================================================================================================================================
+ Package                                           Architecture              Version                         Repository                       Size
+===================================================================================================================================================
+Installing:
+ oracle-instantclient18.3-basic                    x86_64                    18.3.0.0.0-3                    @commandline                     49 M
+ oracle-instantclient18.3-devel                    x86_64                    18.3.0.0.0-3                    @commandline                    596 k
+
+Transaction Summary
+===================================================================================================================================================
+Install  2 Packages
+
+Total size: 50 M
+Installed size: 222 M
+Is this ok [y/N]: y
+Downloading Packages:
+Running transaction check
+Transaction check succeeded.
+Running transaction test
+Transaction test succeeded.
+Running transaction
+  Preparing        :                                                                                                                           1/1
+  Installing       : oracle-instantclient18.3-basic-18.3.0.0.0-3.x86_64                                                                        1/2
+  Installing       : oracle-instantclient18.3-devel-18.3.0.0.0-3.x86_64                                                                        2/2
+  Running scriptlet: oracle-instantclient18.3-devel-18.3.0.0.0-3.x86_64                                                                        2/2
+  Verifying        : oracle-instantclient18.3-basic-18.3.0.0.0-3.x86_64                                                                        1/2
+  Verifying        : oracle-instantclient18.3-devel-18.3.0.0.0-3.x86_64                                                                        2/2
+
+Installed:
+  oracle-instantclient18.3-basic-18.3.0.0.0-3.x86_64                       oracle-instantclient18.3-devel-18.3.0.0.0-3.x86_64
+
+Complete!
+
+
+
+==================================================================================================================================================
+
+[postgres@localhost ~]$ vim .bash_profile
+
+[postgres@test-machine02]vi .bash_profile
+PATH=$PATH:/usr/pgsql-14/bin
+export PATH
+export LD_LIBRARY_PATH=/usr/lib/oracle/18.3/client64/lib
+export ORACLE_HOME=/usr/lib/oracle/18.3/client64
+
+/usr/lib/oracle/18.3/client64/bin
+
+[postgres@localhost ~]$ source .bash_profile
+[postgres@localhost client64]$ echo $LD_LIBRARY_PATH
+/usr/lib/oracle/18.3/client64/lib
+
+Download oracle_fdw from https://pgxn.org/dist/oracle_fdw/2.4.0/
+Upload to machine.
+==================================================================================================================================================
+Remove old version of postgres 13 and install 14 it is no neccesaary but our rquirment:
+
+[root@localhost ~]# sudo yum remove postgresql-server postgresql-contrib
+[root@localhost ~]# dnf remove postgresql*
+Dependencies resolved.
+==================================================================================================================================================
+ Package                                     Architecture        Version                                            Repository               Size
+
+[root@localhost ~]# dnf install postgresql14 postgresql14-server postgresql14-devel
+Last metadata expiration check: 0:07:05 ago on Mon 10 Apr 2023 01:35:26 PM PKT.
+Dependencies resolved.
+==================================================================================================================================================
+ Package                                     Architecture        Version                                             Repository              Size
+==================================================================================================================================================
+Installing:
+ postgresql14                                x86_64              14.7-1PGDG.rhel8                                    pgdg14                 1.5 M
+ postgresql14-devel                          x86_64              14.7-1PGDG.rhel8                                    pgdg14                 2.5 M
+ postgresql14-server                         x86_64              14.7-1PGDG.rhel8                                    pgdg14                 5.7 M
+Installing dependencies:
+ clang                                       x86_64              14.0.6-1.module_el8.7.0+3277+b822483f               appstream               81 k
+ clang-devel                                 x86_64              14.0.6-1.module_el8.7.0+3277+b822483f               appstream              2.4 M
+ clang-libs                                  x86_64              14.0.6-1.module_el8.7.0+3277+b822483f               appstream               23 M
+ clang-resource-filesystem                   x86_64              14.0.6-1.module_el8.7.0+3277+b822483f               appstream               14 k
+ clang-tools-extra                           x86_64              14.0.6-1.module_el8.7.0+3277+b822483f               appstream               15 M
+ cmake-filesystem                            x86_64              3.20.2-4.el8                                        appstream               43 k
+ cpp                                         x86_64              8.5.0-15.el8.alma                                   appstream               10 M
+ environment-modules                         x86_64              4.5.2-2.el8                                         baseos                 420 k
+ gcc                                         x86_64              8.5.0-15.el8.alma                                   appstream               23 M
+ gcc-c++                                     x86_64              8.5.0-15.el8.alma                                   appstream               12 M
+ gcc-toolset-12-binutils                     x86_64              2.38-16.el8                                         appstream              6.5 M
+ gcc-toolset-12-binutils-gold                x86_64              2.38-16.el8                                         appstream              872 k
+ gcc-toolset-12-gcc                          x86_64              12.1.1-3.4.el8_7                                    appstream               44 M
+ gcc-toolset-12-gcc-c++                      x86_64              12.1.1-3.4.el8_7                                    appstream               13 M
+ gcc-toolset-12-libstdc++-devel              x86_64              12.1.1-3.4.el8_7                                    appstream              3.4 M
+ 
+ Initiliaze database:
+ [root@localhost ~]# /usr/pgsql-14/bin/postgresql-14-setup initdb
+Initializing database ... OK
+
+Start postgres service:
+[root@localhost ~]# systemctl start postgresql-14.service
+[root@localhost ~]# systemctl status postgresql-14.service
+● postgresql-14.service - PostgreSQL 14 database server
+   Loaded: loaded (/usr/lib/systemd/system/postgresql-14.service; disabled; vendor preset: disabled)
+   Active: active (running) since Mon 2023-04-10 14:42:50 PKT; 5s ago
+     Docs: https://www.postgresql.org/docs/14/static/
+	 
+===================================================================
+Create Database:
+
+postgres=# CREATE DATABASE TEST_DB
+postgres-# WITH TEMPLATE template1
+postgres-# OWNER postgres;
+CREATE DATABASE
+
+==================================================================================================================================================
+Add postgres user in sudo:
+sudo usermod -aG wheel postgres
+
+==================================================================================================================================================
+Now i tried to install as a postgres user it gives me the error or permissions:
+/usr/bin/install: cannot create regular file '/usr/pgsql-14/lib/oracle_fdw.so': Permission denied
+make: *** [/usr/pgsql-14/lib/pgxs/src/makefiles/../../src/Makefile.shlib:456: install-lib-shared] Error 1
+
+I have faced one other error:
+
+sr/pgsql-14/include/internal  -D_GNU_SOURCE -I/usr/include/libxml2  -I/usr/include  -c -o oracle_fdw.o oracle_fdw.c
+gcc: error: /usr/lib/rpm/redhat/redhat-hardened-cc1: No such file or directory
+
+Solution of this: sudo dnf install redhat-rpm-config
+
+[root@localhost ~]# sudo dnf install redhat-rpm-config
+Last metadata expiration check: 1:34:54 ago on Mon 10 Apr 2023 01:35:26 PM PKT.
+Dependencies resolved.
+==================================================================================================================================================
+ Package                                  Architecture               Version                                  Repository                     Size
+
+Install Required Pacakges:
+
+
+==================================================================================================================================================
+Now i switch the user and install:
+
+Face below error:
+[root@localhost oracle_fdw-2.4.0]# make
+make: pg_config: Command not found
+make: *** No targets.  Stop.
+Solution: Add the pg_config path in profile:
+[root@localhost ~]# vi /etc/profile
+Scroll down to the end of the file and add the following line:
+export PATH=$PATH:/usr/pgsql-14/bin
+And save the file:
+==================================================================================================================================================
+Again Trying to install using make and make install:
+
+[root@localhost oracle_fdw-2.4.0]# make
+gcc -Wall -Wmissing-prototypes -Wpointer-arith -Wdeclaration-after-statement -Werror=vla -Wendif-labels -Wmissing-format-attribute -Wimplicit-fallthrough=3 -Wcast-function-type -Wformat-security -fno-strict-aliasing -fwrapv -fexcess-precision=standard -Wno-format-truncation -Wno-stringop-truncation -O2 -g -pipe -Wall -Werror=format-security -Wp,-D_FORTIFY_SOURCE=2 -Wp,-D_GLIBCXX_ASSERTIONS -fexceptions -fstack-protector-strong -grecord-gcc-switches -specs=/usr/lib/rpm/redhat/redhat-hardened-cc1 -specs=/usr/lib/rpm/redhat/redhat-annobin-cc1 -m64 -mtune=generic -fasynchronous-unwind-tables -fstack-clash-protection -fcf-protection -fPIC -I"/sdk/include" -I"/oci/include" -I"/rdbms/public" -I"/" -I/usr/include/oracle/21/client64 -I/usr/include/oracle/19.12/client64 -I/usr/include/oracle/19.12/client -I/usr/include/oracle/19.11/client64 -I/usr/include/oracle/19.11/client -I/usr/include/oracle/19.10/client64 -I/usr/include/oracle/19.10/client -I/usr/include/oracle/19.9/client -I/usr/include/oracle/19.9/client64 -I/usr/include/oracle/19.8/client -I/usr/include/oracle/19.8/client64 -I/usr/include/oracle/19.6/client -I/usr/include/oracle/19.6/client64 -I/usr/include/oracle/19.3/client -I/usr/include/oracle/19.3/client64 -I/usr/include/oracle/18.5/client -I/usr/include/oracle/18.5/client64 -I/usr/include/oracle/18.3/client -I/usr/include/oracle/18.3/client64 -I/usr/include/oracle/12.2/client -I/usr/include/oracle/12.2/client64 -I/usr/include/oracle/12.1/client -I/usr/include/oracle/12.1/client64 -I/usr/include/oracle/11.2/client -I/usr/include/oracle/11.2/client64 -I/usr/include/oracle/11.1/client -I/usr/include/oracle/11.1/client64 -I/usr/include/oracle/10.2.0.5/client -I/usr/include/oracle/10.2.0.5/client64 -I/usr/include/oracle/10.2.0.4/client -I/usr/include/oracle/10.2.0.4/client64 -I/usr/include/oracle/10.2.0.3/client -I/usr/include/oracle/10.2.0.3/client64 -I. -I./ -I/usr/pgsql-14/include/server -I/usr/pgsql-14/include/internal  -D_GNU_SOURCE -I/usr/include/libxml2  -I/usr/include  -c -o oracle_fdw.o oracle_fdw.c
+gcc -Wall -Wmissing-prototypes -Wpointer-arith -Wdeclaration-after-statement -Werror=vla -Wendif-labels -Wmissing-format-attribute -Wimplicit-fallthrough=3 -Wcast-function-type -Wformat-security -fno-strict-aliasing -fwrapv -fexcess-precision=standard -Wno-format-truncation -Wno-stringop-truncation -O2 -g -pipe -Wall -Werror=format-security -Wp,-D_FORTIFY_SOURCE=2 -Wp,-D_GLIBCXX_ASSERTIONS -fexceptions -fstack-protector-strong -grecord-gcc-switches -specs=/usr/lib/rpm/redhat/redhat-hardened-cc1 -specs=/usr/lib/rpm/redhat/redhat-annobin-cc1 -m64 -mtune=generic -fasynchronous-unwind-tables -fstack-clash-protection -fcf-protection -fPIC -I"/sdk/include" -I"/oci/include" -I"/rdbms/public" -I"/" -I/usr/include/oracle/21/client64 -I/usr/include/oracle/19.12/client64 -I/usr/include/oracle/19.12/client -I/usr/include/oracle/19.11/client64 -I/usr/include/oracle/19.11/client -I/usr/include/oracle/19.10/client64 -I/usr/include/oracle/19.10/client -I/usr/include/oracle/19.9/client -I/usr/include/oracle/19.9/client64 -I/usr/include/oracle/19.8/client -I/usr/include/oracle/19.8/client64 -I/usr/include/oracle/19.6/client -I/usr/include/oracle/19.6/client64 -I/usr/include/oracle/19.3/client -I/usr/include/oracle/19.3/client64 -I/usr/include/oracle/18.5/client -I/usr/include/oracle/18.5/client64 -I/usr/include/oracle/18.3/client -I/usr/include/oracle/18.3/client64 -I/usr/include/oracle/12.2/client -I/usr/include/oracle/12.2/client64 -I/usr/include/oracle/12.1/client -I/usr/include/oracle/12.1/client64 -I/usr/include/oracle/11.2/client -I/usr/include/oracle/11.2/client64 -I/usr/include/oracle/11.1/client -I/usr/include/oracle/11.1/client64 -I/usr/include/oracle/10.2.0.5/client -I/usr/include/oracle/10.2.0.5/client64 -I/usr/include/oracle/10.2.0.4/client -I/usr/include/oracle/10.2.0.4/client64 -I/usr/include/oracle/10.2.0.3/client -I/usr/include/oracle/10.2.0.3/client64 -I. -I./ -I/usr/pgsql-14/include/server -I/usr/pgsql-14/include/internal  -D_GNU_SOURCE -I/usr/include/libxml2  -I/usr/include  -c -o oracle_utils.o oracle_utils.c
+gcc -Wall -Wmissing-prototypes -Wpointer-arith -Wdeclaration-after-statement -Werror=vla -Wendif-labels -Wmissing-format-attribute -Wimplicit-fallthrough=3 -Wcast-function-type -Wformat-security -fno-strict-aliasing -fwrapv -fexcess-precision=standard -Wno-format-truncation -Wno-stringop-truncation -O2 -g -pipe -Wall -Werror=format-security -Wp,-D_FORTIFY_SOURCE=2 -Wp,-D_GLIBCXX_ASSERTIONS -fexceptions -fstack-protector-strong -grecord-gcc-switches -specs=/usr/lib/rpm/redhat/redhat-hardened-cc1 -specs=/usr/lib/rpm/redhat/redhat-annobin-cc1 -m64 -mtune=generic -fasynchronous-unwind-tables -fstack-clash-protection -fcf-protection -fPIC -I"/sdk/include" -I"/oci/include" -I"/rdbms/public" -I"/" -I/usr/include/oracle/21/client64 -I/usr/include/oracle/19.12/client64 -I/usr/include/oracle/19.12/client -I/usr/include/oracle/19.11/client64 -I/usr/include/oracle/19.11/client -I/usr/include/oracle/19.10/client64 -I/usr/include/oracle/19.10/client -I/usr/include/oracle/19.9/client -I/usr/include/oracle/19.9/client64 -I/usr/include/oracle/19.8/client -I/usr/include/oracle/19.8/client64 -I/usr/include/oracle/19.6/client -I/usr/include/oracle/19.6/client64 -I/usr/include/oracle/19.3/client -I/usr/include/oracle/19.3/client64 -I/usr/include/oracle/18.5/client -I/usr/include/oracle/18.5/client64 -I/usr/include/oracle/18.3/client -I/usr/include/oracle/18.3/client64 -I/usr/include/oracle/12.2/client -I/usr/include/oracle/12.2/client64 -I/usr/include/oracle/12.1/client -I/usr/include/oracle/12.1/client64 -I/usr/include/oracle/11.2/client -I/usr/include/oracle/11.2/client64 -I/usr/include/oracle/11.1/client -I/usr/include/oracle/11.1/client64 -I/usr/include/oracle/10.2.0.5/client -I/usr/include/oracle/10.2.0.5/client64 -I/usr/include/oracle/10.2.0.4/client -I/usr/include/oracle/10.2.0.4/client64 -I/usr/include/oracle/10.2.0.3/client -I/usr/include/oracle/10.2.0.3/client64 -I. -I./ -I/usr/pgsql-14/include/server -I/usr/pgsql-14/include/internal  -D_GNU_SOURCE -I/usr/include/libxml2  -I/usr/include  -c -o oracle_gis.o oracle_gis.c
+gcc -Wall -Wmissing-prototypes -Wpointer-arith -Wdeclaration-after-statement -Werror=vla -Wendif-labels -Wmissing-format-attribute -Wimplicit-fallthrough=3 -Wcast-function-type -Wformat-security -fno-strict-aliasing -fwrapv -fexcess-precision=standard -Wno-format-truncation -Wno-stringop-truncation -O2 -g -pipe -Wall -Werror=format-security -Wp,-D_FORTIFY_SOURCE=2 -Wp,-D_GLIBCXX_ASSERTIONS -fexceptions -fstack-protector-strong -grecord-gcc-switches -specs=/usr/lib/rpm/redhat/redhat-hardened-cc1 -specs=/usr/lib/rpm/redhat/redhat-annobin-cc1 -m64 -mtune=generic -fasynchronous-unwind-tables -fstack-clash-protection -fcf-protection -fPIC -shared -o oracle_fdw.so oracle_fdw.o oracle_utils.o oracle_gis.o -L/usr/pgsql-14/lib  -Wl,--as-needed -L/usr/lib64  -L/usr/lib64 -Wl,--as-needed -Wl,-rpath,'/usr/pgsql-14/lib',--enable-new-dtags  -L"/" -L"/bin" -L"/lib" -L"/lib/amd64" -lclntsh -L/usr/lib/oracle/21/client64/lib -L/usr/lib/oracle/19.12/client64/lib -L/usr/lib/oracle/19.12/client/lib -L/usr/lib/oracle/19.11/client64/lib -L/usr/lib/oracle/19.11/client/lib -L/usr/lib/oracle/19.10/client64/lib -L/usr/lib/oracle/19.10/client/lib -L/usr/lib/oracle/19.9/client/lib -L/usr/lib/oracle/19.9/client64/lib -L/usr/lib/oracle/19.8/client/lib -L/usr/lib/oracle/19.8/client64/lib -L/usr/lib/oracle/19.6/client/lib -L/usr/lib/oracle/19.6/client64/lib -L/usr/lib/oracle/19.3/client/lib -L/usr/lib/oracle/19.3/client64/lib -L/usr/lib/oracle/18.5/client/lib -L/usr/lib/oracle/18.5/client64/lib -L/usr/lib/oracle/18.3/client/lib -L/usr/lib/oracle/18.3/client64/lib -L/usr/lib/oracle/12.2/client/lib -L/usr/lib/oracle/12.2/client64/lib -L/usr/lib/oracle/12.1/client/lib -L/usr/lib/oracle/12.1/client64/lib -L/usr/lib/oracle/11.2/client/lib -L/usr/lib/oracle/11.2/client64/lib -L/usr/lib/oracle/11.1/client/lib -L/usr/lib/oracle/11.1/client64/lib -L/usr/lib/oracle/10.2.0.5/client/lib -L/usr/lib/oracle/10.2.0.5/client64/lib -L/usr/lib/oracle/10.2.0.4/client/lib -L/usr/lib/oracle/10.2.0.4/client64/lib -L/usr/lib/oracle/10.2.0.3/client/lib -L/usr/lib/oracle/10.2.0.3/client64/lib
+
+[root@localhost oracle_fdw-2.4.0]# make install
+/usr/bin/mkdir -p '/usr/pgsql-14/lib'
+/usr/bin/mkdir -p '/usr/pgsql-14/share/extension'
+/usr/bin/mkdir -p '/usr/pgsql-14/share/extension'
+/usr/bin/mkdir -p '/usr/pgsql-14/doc/extension'
+/usr/bin/install -c -m 755  oracle_fdw.so '/usr/pgsql-14/lib/oracle_fdw.so'
+/usr/bin/install -c -m 644 .//oracle_fdw.control '/usr/pgsql-14/share/extension/'
+/usr/bin/install -c -m 644 .//oracle_fdw--1.2.sql .//oracle_fdw--1.0--1.1.sql .//oracle_fdw--1.1--1.2.sql  '/usr/pgsql-14/share/extension/'
+/usr/bin/install -c -m 644 .//README.oracle_fdw '/usr/pgsql-14/doc/extension/'
+
+==================================================================================================================================================
+
+
+These are the some of required packages to install oracle_fdw.
+Note: Some of them may not work these pacakges are hit and trail but postgres devel is neccesaary to install.
+
+wget --no-check-certificate https://repo.almalinux.org/almalinux/9/BaseOS/x86_64/os/Packages/glibc-2.34-40.el9.x86_64.rpm
+wget --no-check-certificate https://repo.almalinux.org/almalinux/9/AppStream/x86_64/os/Packages/libecpg-13.5-1.el9.x86_64.rpm
+wget --no-check-certificate https://download.postgresql.org/pub/repos/yum/13/redhat/rhel-9-x86_64/postgresql13-libs-13.10-1PGDG.rhel9.x86_64.rpm
+wget --no-check-certificate https://rpms.remirepo.net/enterprise/8/remi/x86_64/libicu62-devel-62.2-1.el8.remi.x86_64.rpm
+wget --no-check-certificate https://repo.almalinux.org/almalinux/8/AppStream/x86_64/os/Packages/libpgtypes-13.5-3.el8.x86_64.rpm
+wget --no-check-certificate https://repo.almalinux.org/almalinux/8/AppStream/x86_64/os/Packages/libpq-13.5-1.el8.x86_64.rpm
+wget --no-check-certificate https://repo.almalinux.org/almalinux/8/BaseOS/x86_64/os/Packages/glibc-2.28-211.el8.x86_64.rpm
+wget --no-check-certificate https://repo.almalinux.org/almalinux/8/BaseOS/x86_64/os/Packages/glibc-2.28-211.el8.x86_64.rpm
+wget --no-check-certificate https://repo.almalinux.org/almalinux/8/AppStream/x86_64/os/Packages/llvm-devel-14.0.6-1.module_el8.7.0+3277+b822483f.i686.rpm
+wget --no-check-certificate https://download.postgresql.org/pub/repos/yum/13/redhat/rhel-8-x86_64/postgresql13-libs-13.10-1PGDG.rhel8.x86_64.rpm
+wget --no-check-certificate https://repo.almalinux.org/almalinux/9/BaseOS/x86_64/os/Packages/glibc-2.34-40.el9_1.1.i686.rpm
+wget --no-check-certificate https://repo.almalinux.org/almalinux/8/AppStream/x86_64/os/Packages/clang-devel-14.0.6-1.module_el8.7.0+3277+b822483f.x86_64.rpm
+wget --no-check-certificate https://repo.almalinux.org/almalinux/8/AppStream/x86_64/os/Packages/clang-devel-14.0.6-1.module_el8.7.0+3277+b822483f.x86_64.rpm
+==================================================================================================================================================
+After installing the oracle_fdw next step is to create a extension in database:
+
+Multiple error received during this below pasted with solution:
+===================================================================
+Add the below lines in :
+[root@localhost pgsql-14]#  vi /etc/ld.so.conf
+/usr/lib/oracle/18.3/client64/lib
+/usr/lib/oracle/18.3/client64
+
+
+===================================================================
+[root@localhost oracle_fdw-2.4.0]# ldconfig -p | grep libclntsh.so.18.1
+        libclntsh.so.18.1 (libc6,x86-64) => /usr/lib/oracle/18.3/client64/lib/libclntsh.so.18.1
+===================================================================		
+		Face the permissions Isuues:
+[root@localhost oracle_fdw-2.4.0]# chown -R postgres:postgres /var/lib/pgsql/oracle_fdw-2.4.0
+[root@localhost oracle_fdw-2.4.0]# chown -R postgres:postgres /usr/pgsql-14/lib/oracle_fdw.so
+===================================================================
+
+Error:postgres=# create extension oracle_fdw;
+ERROR:  could not load library "/usr/pgsql-14/lib/oracle_fdw.so": libclntsh.so.18.1: cannot open shared object file: No such file or directory
+Solution:4[postgres@localhost ~]$ ldconfig -p | grep libclntsh.so.18.1
+        libclntsh.so.18.1 (libc6,x86-64) => /usr/lib/oracle/18.3/client64/lib/libclntsh.so.18.1
+===================================================================
+postgres=# create extension oracle_fdw;
+ERROR:  could not load library "/usr/pgsql-14/lib/oracle_fdw.so": libnsl.so.1: cannot open shared object file: No such file or directory
+===================================================================
+Face the above  error during create extension:
+Solution: Install missing libarires:
+
+[root@localhost pgsql-14]# dnf install libnsl.so.1
+Last metadata expiration check: 2:29:20 ago on Mon 10 Apr 2023 01:35:26 PM PKT.
+Dependencies resolved.
+==================================================================================================================================================
+ Package                                   Architecture                 Version                              Repository                      Size
+==================================================================================================================================================
+Installing:
+ libnsl                                    i686                         2.28-211.el8                         baseos                         106 k
+Installing dependencies:
+ glibc                                     i686                         2.28-211.el8                         baseos                         2.0 M
+Installing weak dependencies:
+ glibc-gconv-extra                         i686                         2.28-211.el8                         baseos                         1.6 M
+
+[root@localhost pgsql-14]# sudo dnf install libnsl
+Last metadata expiration check: 2:32:37 ago on Mon 10 Apr 2023 01:35:26 PM PKT.
+Package libnsl-2.28-211.el8.i686 is already installed.
+Dependencies resolved.
+==================================================================================================================================================
+ Package                          Architecture                     Version                                 Repository                        Size
+==================================================================================================================================================
+Installing:
+ libnsl                           x86_64                           2.28-211.el8                            baseos                           103 k
+
+Transaction Summary
+==================================================================================================================================================
+Install  1 Package
+
+Total download size: 103 k
+Installed size: 97 k
+Is this ok [y/N]: y
+Downloading Packages:
+libnsl-2.28-211.el8.x86_64.rpm                                                                                     25 kB/s | 103 kB     00:04
+--------------------------------------------------------------------------------------------------------------------------------------------------
+Total                                                                                                              19 kB/s | 103 kB     00:05
+Running transaction check
+Transaction check succeeded.
+Running transaction test
+Transaction test succeeded.
+===================================================================
+Now again run ldconfig as a root user:
+
+[root@localhost pgsql-14]# ldconfig
+
+[root@localhost pgsql-14]# ldconfig -p | grep libnsl.so.1
+        libnsl.so.1 (libc6,x86-64, OS ABI: Linux 3.2.0) => /lib64/libnsl.so.1
+        libnsl.so.1 (libc6, OS ABI: Linux 3.2.0) => /lib/libnsl.so.1
+===================================================================
+Now run as a postgres user and Check:
+[postgres@localhost oracle_fdw-2.4.0]$ ldconfig -p | grep libnsl.so.1
+        libnsl.so.1 (libc6,x86-64, OS ABI: Linux 3.2.0) => /lib64/libnsl.so.1
+        libnsl.so.1 (libc6, OS ABI: Linux 3.2.0) => /lib/libnsl.so.1
+[postgres@localhost oracle_fdw-2.4.0]$ psql
+
+===================================================================
+Again Create Extnsion in database:
+[postgres@localhost oracle_fdw-2.4.0]$ psql
+psql (14.7)
+Type "help" for help.
+
+postgres=# create extension oracle_fdw;
+CREATE EXTENSION
+
+
+Finally Created
+
+postgres=# \dx
+                        List of installed extensions
+    Name    | Version |   Schema   |              Description
+------------+---------+------------+----------------------------------------
+ oracle_fdw | 1.2     | public     | foreign data wrapper for Oracle access
+ plpgsql    | 1.0     | pg_catalog | PL/pgSQL procedural language
+
+postgres=# select * from pg_extension;
+  oid  |  extname   | extowner | extnamespace | extrelocatable | extversion | extconfig | extcondition
+-------+------------+----------+--------------+----------------+------------+-----------+--------------
+ 14684 | plpgsql    |       10 |           11 | f              | 1.0        |           |
+ 16393 | oracle_fdw |       10 |         2200 | t              | 1.2        |           |
+(2 rows)
+
+
+===================================================================
+Create the Foreign Server in PostgreSQL:
+
+
+Check connectivty to Foreign Server from source server:
+[postgres@localhost oracle_fdw-2.4.0]$ ping 192.168.44.194
+PING 192.168.44.194 (192.168.44.194) 56(84) bytes of data.
+64 bytes from 192.168.44.194: icmp_seq=1 ttl=64 time=0.611 ms
+64 bytes from 192.168.44.194: icmp_seq=2 ttl=64 time=0.436 ms
+
+[postgres@localhost oracle_fdw-2.4.0]$ telnet 192.168.44.194 1521
+Trying 192.168.44.194...
+Connected to 192.168.44.194.
+Escape character is '^]'.
+
+Create server in postgres:
+postgres=# CREATE SERVER fs_oracle FOREIGN DATA WRAPPER oracle_fdw OPTIONS(dbserver '192.168.44.194:1521/sourcedb');
+CREATE SERVER
+postgres=# select * from pg_foreign_server;
+  oid  |  srvname  | srvowner | srvfdw | srvtype | srvversion | srvacl |               srvoptions
+-------+-----------+----------+--------+---------+------------+--------+-----------------------------------------
+ 16400 | fs_oracle |       10 |  16399 |         |            |        | {dbserver=192.168.44.194:1521/sourcedb}
+(1 row)
+===================================================================
+ Grant the Local User Access to the Foreign Server in PostgreSQL:
+
+
+postgres=# CREATE USER test_user WITH SUPERUSER PASSWORD '123';
+CREATE ROLE
+postgres=# grant usage on foreign server fs_oracle to test_user;
+GRANT
+postgres=# GRANT USAGE ON FOREIGN SERVER fs_oracle TO postgres;
+GRANT
+===================================================================
+On oracle Database:
+SQL> CREATE USER ORACLE_TEST IDENTIFIED BY 123;
+
+User created.
+
+SQL> GRANT DBA TO ORACLE_TEST;
+
+Grant succeeded.
+===================================================================
+Create Mapping:
+postgres=# CREATE USER MAPPING FOR postgres SERVER fs_oracle OPTIONS (user 'ORACLE_TEST', password '123');
+CREATE USER MAPPING
+postgres=# select * from pg_user_mappings;
+ umid  | srvid |  srvname  | umuser | usename  |            umoptions
+-------+-------+-----------+--------+----------+---------------------------------
+ 16402 | 16400 | fs_oracle |     10 | postgres | {user=ORACLE_TEST,password=123}
+(1 row)
+===================================================================
+
+create server testmachine01_oracle foreign data wrapper oracle_fdw options (dbserver '//test-machine01:1521/test01' );
+ CREATE SERVER fs_oracle FOREIGN DATA WRAPPER oracle_fdw OPTIONS(dbserver '192.168.44.194:1521/sourcedb');   
+ 
+ 
+We have table in oracle schema ORACLE_TEST and table name is employee and we import table into postgres:
+On oracle:
+SQL> select * from ORACLE_TEST.employee;
+
+    EMP_ID EMP_NAME                                           EMP_SALARY
+---------- -------------------------------------------------- ----------
+         1 John Smith                                              50000
+         2 Jane Doe                                                60000
+         3 Bob Johnson                                             70000
+         1 John Smith                                              50000
+         2 Jane Doe                                                60000
+         3 Bob Johnson                                             70000
+         4 Alice Brown                                             55000
+         5 Charlie Davis                                           65000
+         6 David Lee                                               72000
+         7 Emily Chen                                              68000
+         8 Frank Rodriguez                                         80000
+
+    EMP_ID EMP_NAME                                           EMP_SALARY
+---------- -------------------------------------------------- ----------
+         9 Grace Wang                                              59000
+        10 Henry Kim                                               75000
+        11 Isabella Nguyen                                         63000
+        12 Jackie Wong                                             54000
+        13 Kevin Patel                                             69000
+
+16 rows selected.
+
+Import on postgres:
+
+postgres=# IMPORT FOREIGN SCHEMA "ORACLE_TEST" limit to (employee) FROM SERVER fs_oracle INTO public;
+IMPORT FOREIGN SCHEMA
+postgres=# select * from public.employee;
+ emp_id |    emp_name     | emp_salary
+--------+-----------------+------------
+      1 | John Smith      |   50000.00
+      2 | Jane Doe        |   60000.00
+      3 | Bob Johnson     |   70000.00
+      1 | John Smith      |   50000.00
+      2 | Jane Doe        |   60000.00
+      3 | Bob Johnson     |   70000.00
+      4 | Alice Brown     |   55000.00
+      5 | Charlie Davis   |   65000.00
+      6 | David Lee       |   72000.00
+      7 | Emily Chen      |   68000.00
+      8 | Frank Rodriguez |   80000.00
+      9 | Grace Wang      |   59000.00
+     10 | Henry Kim       |   75000.00
+     11 | Isabella Nguyen |   63000.00
+     12 | Jackie Wong     |   54000.00
+     13 | Kevin Patel     |   69000.00
+postgres-# \d
+              List of relations
+ Schema |   Name   |     Type      |  Owner
+--------+----------+---------------+----------
+ public | employee | foreign table | postgres
+(1 row)
+
+
+===================================================================D O N E ===================================================================
+Note: Only Libarires and missing pacakges are hard to find and match.
+Its batter to use make as a root user and make install as a postgres user.
+
+
+Resources:
+
+https://dbsguru.com/steps-to-setup-a-foreign-data-wrapperpostgres_fdw-in-postgresql/
+https://github.com/laurenz/oracle_fdw/issues/62
+https://techviewleo.com/install-postgresql-on-rocky-linux-almalinux-centos/
+https://stackoverflow.com/questions/59928193/postgresql-11-and-oracle-foreign-data-wrapper
+https://stackoverflow.com/questions/12903619/pg-config-in-postgresql-8-3-1
+https://dbsguru.com/access-oracle-database-from-postgresql-using-oracle-foreign-data-wrapper-oracle_fdw/
+https://stackoverflow.com/questions/59928193/postgresql-11-and-oracle-foreign-data-wrapper
+https://www.enterprisedb.com/postgres-tutorials/using-foreign-data-wrappers-access-remote-postgresql-and-oracle-databases
