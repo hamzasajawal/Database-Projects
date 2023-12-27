@@ -1,0 +1,242 @@
+Encryption Decryption using DBMS_CRYPTO:
+===============================================================================================================================================
+
+Add package code in file on OS:
+[oracle@database-ntlbill-vmcloud ~]$ vi enc_dec.sql
+
+
+CREATE OR REPLACE PACKAGE enc_dec
+
+AS
+
+   FUNCTION encrypt (p_plainText VARCHAR2) RETURN RAW DETERMINISTIC;
+
+   FUNCTION decrypt (p_encryptedText RAW) RETURN VARCHAR2 DETERMINISTIC;
+
+END;
+
+/
+
+CREATE OR REPLACE PACKAGE BODY enc_dec
+
+AS
+
+     encryption_type    PLS_INTEGER := DBMS_CRYPTO.ENCRYPT_DES
+
+                                     + DBMS_CRYPTO.CHAIN_CBC
+
+                                     + DBMS_CRYPTO.PAD_PKCS5;
+
+     encryption_key     RAW (32) := UTL_RAW.cast_to_raw('MYsecretkey128349');
+
+
+      FUNCTION encrypt (p_plainText VARCHAR2) RETURN RAW DETERMINISTIC
+
+     IS
+
+        encrypted_raw      RAW (2000);
+
+     BEGIN
+
+        encrypted_raw := DBMS_CRYPTO.ENCRYPT
+
+        (
+
+           src => UTL_RAW.CAST_TO_RAW (p_plainText),
+
+           typ => encryption_type,
+
+           key => encryption_key
+
+        );
+
+       RETURN encrypted_raw;
+
+     END encrypt;
+
+     FUNCTION decrypt (p_encryptedText RAW) RETURN VARCHAR2 DETERMINISTIC
+
+     IS
+
+        decrypted_raw      RAW (2000);
+
+     BEGIN
+
+        decrypted_raw := DBMS_CRYPTO.DECRYPT
+
+        (
+
+            src => p_encryptedText,
+
+            typ => encryption_type,
+
+            key => encryption_key
+
+        );
+
+        RETURN (UTL_RAW.CAST_TO_VARCHAR2 (decrypted_raw));
+
+     END decrypt;
+
+END;
+
+/
+
+
+[oracle@database-ntlbill-vmcloud ~]$ ls -ltra enc_dec.sql
+-rw-r--r-- 1 oracle oinstall 1281 Jul 15 12:19 enc_dec.sql
+
+===============================================================================================================================================
+wrap the source code to hide the source code using wrap utility. Because our package contains secret key:
+
+wrap iname=enc_dec.sql oname=enc_dec.sql.wrp
+
+[oracle@database-ntlbill-vmcloud ~]$ wrap iname=enc_dec.sql oname=enc_dec.sql.wrp
+
+PL/SQL Wrapper: Release 11.2.0.4.0- 64bit Production on Sat Jul 15 12:20:41 2023
+
+Copyright (c) 1993, 2009, Oracle.  All rights reserved.
+
+Processing enc_dec.sql to enc_dec.sql.wrp
+
+===============================================================================================================================================
+Login as sys user and run script:
+
+
+SQL> @enc_dec.sql.wrp
+
+Package created.
+
+
+Package body created.
+
+Now if you see the content in wrp file or in database it will be look like below:(Which is encrypted)
+
+CREATE OR REPLACE PACKAGE enc_dec wrapped
+a000000
+1f
+abcd
+abcd
+abcd
+abcd
+abcd
+abcd
+abcd
+abcd
+abcd
+abcd
+abcd
+abcd
+abcd
+abcd
+abcd
+9
+aa ba
+8Z/7kKR1ELMN3HpnUctNsIvICQowgwFH7cusaXQ5acH4jpoWCtVe67qgzPwuPvlZdIX8+NCr
+rBRAW1ewL08pFnUZhqXs1IlNDL1n6/0Hh7LginLTtJxrcVpiXfNT90705GmvbCN4V1X3bNu6
+Ks3mvvkPwtjZ0/JBsJZxt5pFWNvA7fimq1RWjw==
+
+===============================================================================================================================================
+Grant excute privlliege to user for testing:
+
+SQL> grant execute on enc_dec to eshamzasajawal;
+
+Grant succeeded.
+
+===============================================================================================================================================
+Test Encrpytion  on column:
+
+
+--Create table:
+
+SQL> CREATE TABLE eshamzasajawal.encryption_test
+(
+ id number,
+ name varchar2(60),
+ IBAN varchar2(50)
+); 
+
+Table created.
+
+Insert encrypted record and check:
+
+SQL> INSERT INTO eshamzasajawal.encryption_test VALUES (1,'TESTUSER',enc_dec.encrypt('716126a#Hs537'));
+
+1 row created.
+
+SQL> commit;
+
+Commit complete.
+
+We can see that our IBAN is in encrypted form.
+SQL> select * from eshamzasajawal.encryption_test;
+
+        ID NAME
+---------- ------------------------------------------------------------
+IBAN
+--------------------------------------------------
+         1 TESTUSER
+C4066CBA458F69447827C61E93D73A2C
+
+
+Dycrypt IBAN Column to see data:
+
+SQL> select id,name,enc_dec.DECRYPT(IBAN) from eshamzasajawal.encryption_test;
+
+        ID NAME
+---------- ------------------------------------------------------------
+ENC_DEC.DECRYPT(IBAN)
+--------------------------------------------------------------------------------
+         1 TESTUSER
+716126a#Hs537
+
+We can see that using our pacakage enc_dec we can encrypt and decrypt any column data (only column those have varchar2 data type, for other datatypes we need to create saprate function).
+
+===============================================================================================================================================
+update existing records:
+
+Suppose we have existing records without encryption:
+SQL> INSERT INTO eshamzasajawal.encryption_test VALUES (2,'user2','9373#8912837AD');
+
+1 row created.
+
+SQL> commit;
+
+Commit complete.
+
+We can update:
+
+SQL> UPDATE eshamzasajawal.encryption_test
+SET IBAN = enc_dec.encrypt(IBAN)
+WHERE id=2; 
+
+1 row updated.
+
+SQL> commit
+SQL> select * from eshamzasajawal.encryption_test where id=2;
+
+        ID NAME
+---------- ------------------------------------------------------------
+IBAN
+--------------------------------------------------
+         2 user2
+0DF7629444A55855FE056CF5F8A202CD
+
+SQL> select id,name,enc_dec.DECRYPT(IBAN) from eshamzasajawal.encryption_test where id=2;
+
+        ID NAME
+---------- ------------------------------------------------------------
+ENC_DEC.DECRYPT(IBAN)
+--------------------------------------------------------------------------------
+         2 user2
+9373#8912837AD
+
+
+We can see that using same encryption function we can encrypt and decrypt the existing records in table also.
+
+Note: If we want to encrypt the datatype like number or any other we have to create same pacakage for different
+datatype. For this e have to modify the above code and change datatypes.
+
+===============================================================================================================================================
+
+https://www.nazmulhuda.info/encryption-decryption-using-dbms_crypto
