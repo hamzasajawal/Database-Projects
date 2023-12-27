@@ -1,1 +1,141 @@
+Logical replication is a method of replicating data objects and their changes ,
+based upon their replication identity (usually a primary key).
+Logical replication allows fine grained control over both data replication and security.
+Subscriber pulls data from the publications they subscribe.
+Logical replication of table typically starts with taking a snapshot of the data on
+the publisher database and copying that to subscriber.
+
+Changes on the publisher are sent to the subscriber as they occur in real time.
+Subscriber applies the data in same order as the publications so that transactional consistency.
+.....................................................
+
+Use cases for logical replication:
+
+-Sending incremental changes in a single database/database to subscribers.
+-Consolidating multiple databases into a single one.
+-Replicating between different versions.
+-Replicating between PostgreSQL instances on different platforms
+-Sharing a subset of database between multiple databases.
+.........................................................
+
+Logical Replication Demo:
+.........................................
+On Publisher\
+Step 1:
+vi postgresql.conf 
+ #listen_addresses='localhost' #what Ip address to listen on;
+ wal_level=logical
+vi pg_hba.conf (add the ip of subscriber)
+#TYPE	DATABASE	 USER	 ADDDRESS
+host	all			all		ip
+ 
+After adding these entries restart the service:
+......................................
+Step 2: On Publication:
+Creating a database, user and table for replication:
+
+postgres=# CREATE DATABASE rep_db;
+CREATE DATABASE
+
+postgres=# \c rep_db
+
+create table in rep_db:
+
+rep_db=# CREATE TABLE COMPANY(
+   ID INT PRIMARY KEY     NOT NULL,
+   NAME           TEXT    NOT NULL,
+   AGE            INT     NOT NULL,
+   ADDRESS        CHAR(50),
+   SALARY         REAL
+);
+CREATE TABLE
+
+CREATE ROLE rep_user WITH REPLICATION LOGIN PASSWORD '123';
+CREATE ROLE
+
+postgres=# GRANT ALL PRIVILEGES ON DATABASE rep_db TO rep_user;
+GRANT
+
+postgres=# GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public to rep_user;
+GRANT
+........................
+Step 3: On Subscriber (Note: Use the same database name and table structure which is on publishier DDL is not accepted after the creation of replication on subscriber)
+
+Creating a database, user and table for replication:
+postgres=# CREATE DATABASE rep_db;
+CREATE DATABASE
+postgres=# \c rep_db
+You are now connected to database "rep_db" as user "postgres".
+rep_db=# CREATE TABLE COMPANY(
+   ID INT PRIMARY KEY     NOT NULL,
+   NAME           TEXT    NOT NULL,
+   AGE            INT     NOT NULL,
+   ADDRESS        CHAR(50),
+   SALARY         REAL
+);
+CREATE TABLE
+.......................
+
+Step 4: On Publication:
+
+Setting up a publications.
+
+rep_db=# CREATE PUBLICATION my_publication;
+WARNING:  wal_level is insufficient to publish logical changes
+HINT:  Set wal_level to logical before creating subscriptions.
+CREATE PUBLICATION
+rep_db=# ALTER SYSTEM SET wal_level=logical;
+ALTER SYSTEM
+
+rep_db=# ALTER PUBLICATION my_publication ADD TABLE company;
+ALTER PUBLICATION
+...........................
+Step 5: On Subscriber:
+
+Setting up a susbscription:
+
+rep_db=# CREATE SUBSCRIPTION my_subscription CONNECTION 'host=192.168.52.128 port=5432 password=123 user=rep_user dbname=rep_db' PUBLICATION my_publication;
+NOTICE:  created replication slot "my_subscription" on publisher
+CREATE SUBSCRIPTION
+............................
+
+Now test the replication insert record in publisher and check in subscriber:
+
+ON publisher:
+
+ rep_db=# INSERT INTO COMPANY(ID,NAME,AGE,ADDRESS,SALARY) VALUES(1,'ALI',27,'WAH ISLAMABAD',200000);
+INSERT 0 1
+
+On subscriber:
+rep_db=# select * from company;
+ id | name | age |                      address                       | salary
+----+------+-----+----------------------------------------------------+--------
+  1 | ALI  |  27 | WAH ISLAMABAD                                      | 200000
+  2 | alex |  24 | aust                                               | 400000
+(2 rows)
+
+
+
+............................
+
+Error Faced:
+2022-10-22 16:13:38.017 PKT [8427] LOG:  logical replication table synchronization worker for subscription "my_subscription", table "company" has started
+2022-10-22 16:13:38.066 PKT [8427] ERROR:  could not start initial contents copy for table "public.company": ERROR:  permission denied for table company
+2022-10-22 16:13:38.069 PKT [8262] LOG:  background worker "logical replication worker" (PID 8427) exited with exit code 1
+2022-10-22 16:13:43.095 PKT [8429] LOG:  logical replication table synchronization worker for subscription "my_subscription", table "company" has started
+2022-10-22 16:13:43.147 PKT [8429] ERROR:  could not start initial contents copy for table "public.company": ERROR:  permission denied for table company
+2022-10-22 16:13:43.151 PKT [8262] LOG:  background worker "logical replication worker" (PID 8429) exited with exit code 1
+2022-10-22 16:13:48.177 PKT [8430] LOG:  logical replication table synchronization worker for subscription "my_subscription", table "company" has started
+2022-10-22 16:13:48.232 PKT [8430] ERROR:  could not start initial contents copy for table "public.company": ERROR:  permission denied for table company
+
+Must have superuser permission to rep_user
+postgres=# ALTER USER rep_user with superuser;
+ALTER ROLE
+
+https://www.postgresql.org/docs/current/logical-replication-security.html
+
+..................................................................................
+2022-10-22 16:14:24.027 PKT [8439] LOG:  logical replication table synchronization worker for subscription "my_subscription", table "company" has started
+2022-10-22 16:14:24.086 PKT [8439] LOG:  logical replication table synchronization worker for subscription "my_subscription", table "company" has finished
+
 
