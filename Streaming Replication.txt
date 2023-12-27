@@ -1,0 +1,39 @@
+On Primary Set the Following parameters:
+
+listen_addresses (*)
+wal_level =replica
+max_wal_senders
+max_connections
+wal_sender_timeout
+archive_mode
+archive_command
+
+
+Create a user in primary with replication permission:
+CREATE ROLE rep_user WITH REPLICATION PASSWORD '123' LOGIN;
+
+Add into pg_hba.conf secondary info:
+
+host    replication     rep_user        192.168.44.130/32      md5
+
+Restart the primary.
+
+On Secondary add the modify following parameter in postgres.conf file:
+
+hot_standby=on
+wal_receiver_timeout
+
+primary_conninfo='user=rep_user password=123 channel_binding=prefer host=192.168.44.130 port=5432 sslmode=prefer sslcompression=0 sslsni=1 ssl_min_protocol_version=TLSv1.2 gssencmode=prefer krbsrvname=postgres target_session_attrs=any'
+
+archive_mode
+archive_command
+
+Rename the existing data directory and do not create new one.
+
+Now stop the secondary and run the pgbase backup from secondary:
+
+pg_basebackup -h 192.168.44.129 -p 5432 -U rep_user -D /var/lib/postgresql/14/main -Fp -Xs -R -v
+
+Now start the secondary and check the logs.
+
+
