@@ -1,0 +1,271 @@
+
+PgBouncer Installation and configurations:
+==========================================================================================================================================================
+ #1. Installation
+==========================================================================================================================================================
+[root@pg_vm_2 ~]#  yum install -y pgbouncer
+Last metadata expiration check: 17:00:54 ago on Wed 07 Jun 2023 04:40:14 PM PKT.
+Dependencies resolved.
+==========================================================================================================================================================
+ Package                                 Architecture                  Version                                   Repository                          Size
+==========================================================================================================================================================
+Installing:
+ pgbouncer                               x86_64                        1.19.1-42.rhel8                           pgdg-common                        239 k
+Installing dependencies:
+ python3-psycopg2                        x86_64                        2.9.5-3.rhel8                             pgdg-common                        188 k
+
+Transaction Summary
+==========================================================================================================================================================
+Install  2 Packages
+
+Total download size: 427 k
+Installed size: 1.1 M
+Downloading Packages:
+(1/2): python3-psycopg2-2.9.5-3.rhel8.x86_64.rpm                                                                           58 kB/s | 188 kB     00:03
+(2/2): pgbouncer-1.19.1-42.rhel8.x86_64.rpm                                                                                70 kB/s | 239 kB     00:03
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+Total                                                                                                                     125 kB/s | 427 kB     00:03
+Running transaction check
+Transaction check succeeded.
+Running transaction test
+Transaction test succeeded.
+Running transaction
+  Preparing        :                                                                                                                                  1/1
+  Installing       : python3-psycopg2-2.9.5-3.rhel8.x86_64                                                                                            1/2
+  Running scriptlet: pgbouncer-1.19.1-42.rhel8.x86_64                                                                                                 2/2
+  Installing       : pgbouncer-1.19.1-42.rhel8.x86_64                                                                                                 2/2
+  Running scriptlet: pgbouncer-1.19.1-42.rhel8.x86_64                                                                                                 2/2
+  Verifying        : pgbouncer-1.19.1-42.rhel8.x86_64                                                                                                 1/2
+  Verifying        : python3-psycopg2-2.9.5-3.rhel8.x86_64                                                                                            2/2
+
+Installed:
+  pgbouncer-1.19.1-42.rhel8.x86_64                                          python3-psycopg2-2.9.5-3.rhel8.x86_64
+
+Complete!
+
+
+
+
+Folder permissions to postgres user
+
+chown postgres:postgres /etc/pgbouncer/ -R
+chown postgres:postgres /var/log/pgbouncer/ -R
+sudo chown -R postgres:postgres /var/run/pgbouncer -R
+
+Start pgbouncer service:
+
+[root@pg_vm_2 ~]# systemctl start pgbouncer.service
+[root@pg_vm_2 ~]# systemctl status pgbouncer.service
+● pgbouncer.service - A lightweight connection pooler for PostgreSQL
+   Loaded: loaded (/usr/lib/systemd/system/pgbouncer.service; disabled; vendor preset: disabled)
+   Active: active (running) since Thu 2023-06-08 14:01:55 PKT; 5s ago
+ Main PID: 143792 (pgbouncer)
+    Tasks: 2 (limit: 12244)
+   Memory: 2.1M
+   CGroup: /system.slice/pgbouncer.service
+           └─143792 /usr/bin/pgbouncer /etc/pgbouncer/pgbouncer.ini
+
+Jun 08 14:01:55 pg_vm_2.localdomain systemd[1]: Starting A lightweight connection pooler for PostgreSQL...
+Jun 08 14:01:55 pg_vm_2.localdomain pgbouncer[143792]: could not open auth_file /etc/pgbouncer/userlist.txt: No such file or directory
+Jun 08 14:01:55 pg_vm_2.localdomain pgbouncer[143792]: kernel file descriptor limit: 1024 (hard: 262144); max_client_conn: 100, max expected fd use: 112
+Jun 08 14:01:55 pg_vm_2.localdomain pgbouncer[143792]: listening on 127.0.0.1:6432
+Jun 08 14:01:55 pg_vm_2.localdomain pgbouncer[143792]: listening on unix:/tmp/.s.PGSQL.6432
+Jun 08 14:01:55 pg_vm_2.localdomain pgbouncer[143792]: process up: PgBouncer 1.19.1, libevent 2.1.8-stable (epoll), adns: evdns2, tls: OpenSSL 1.1.1k  FI>
+Jun 08 14:01:55 pg_vm_2.localdomain systemd[1]: Started A lightweight connection pooler for PostgreSQL.
+
+
+Optional
+Create a system d file for pgbouncer: Not neccassary:
+
+[root@pg_vm_2 ~]# vim /usr/lib/systemd/pgbouncer.service
+
+Add below content in file:
+
+[Unit]
+Description=A lightweight connection pooler for PostgreSQL
+Documentation=man:pgbouncer(1)
+After=syslog.target network.target
+[Service]
+RemainAfterExit=yes
+User=postgres
+Group=postgres
+# Path to the init file
+Environment=BOUNCERCONF=/etc/pgbouncer/pgbouncer.ini
+ExecStart=/usr/bin/pgbouncer -q ${BOUNCERCONF}
+ExecReload=/usr/bin/pgbouncer -R -q ${BOUNCERCONF}
+# Give a reasonable amount of time for the server to start up/shut down
+TimeoutSec=300
+[Install]
+WantedBy=multi-user.target
+
+==========================================================================================================================================================
+ 2# Open PgBouncer pgbouncer.ini file and modify following paramters and uncomment:
+==========================================================================================================================================================
+
+listen_addr=0.0.0.0
+listen_port=6432
+auth_type = md5
+auth_hba_file =/etc/pgbouncer/userlist.txt
+admin_users = postgres
+stats_users = postgres
+pool_mode = session
+ignore_startup_parameters = extra_float_digits
+max_client_conn = 100
+default_pool_size = 20
+reserve_pool_size = 20
+reserve_pool_timeout = 5
+server_lifetime = 3600
+server_idle_timeout = 600
+server_connect_timeout = 15
+server_login_retry = 15
+client_login_timeout = 60
+
+Leave these parameters commented for now: These parameters are dangerous.
+;query_timeout = 0
+;query_wait_timeout = 120
+;client_idle_timeout = 0
+
+
+==========================================================================================================================================================
+ 3# Create user.txt file
+==========================================================================================================================================================
+
+Run the below query copy the result and paste into file: /etc/pgbouncer/users.txt
+
+SELECT concat('"', usename, '" "', passwd, '"') FROM pg_shadow;
+
+[postgres@pg_vm_2 ~]$ vim /etc/pgbouncer/users.txt
+
+
+Change the auth_hba_file to auth_file and add the path of /etc/pgbouncer/users.txt:
+
+[postgres@pg_vm_2 ~]$ vim /etc/pgbouncer/pgbouncer.ini
+
+auth_type = hba
+auth_file = /etc/pgbouncer/users.txt
+
+
+Restart the service:
+
+[root@pg_vm_2 systemd]# systemctl restart pgbouncer.service
+
+Monitor the logs:
+
+[postgres@pg_vm_2 pgbouncer]$ tail -100f /var/log/pgbouncer/pgbouncer.log
+tail: cannot open '/var/log/pgbouncer/pgbouncer.log' for reading: Permission denied
+tail: no files remaining
+
+
+chown postgres:postgres /var/log/pgbouncer/ -R
+
+==========================================================================================================================================================
+ 4# Over pgbouncer is configured , Now add databases for users connection in /etc/pgbouncer/pgbouncer.ini
+==========================================================================================================================================================
+
+*These are the databases where users make connection using pgbouncer*
+postgres= host=localhost port=5432 dbname=postgres
+remote_db= host=localhost port=5432 dbname=remote_db
+test_target= host=localhost port=5432 dbname=test_target
+
+Restart the service:
+[postgres@pg_vm_2 pgbouncer]$ sudo systemctl restart pgbouncer.service
+
+==========================================================================================================================================================
+ 5# Now creating connection(using pgbouncer port 6432)  with databases with different users(which we added in users.txt) And check the logs:
+==========================================================================================================================================================
+[postgres@pg_vm_2 pgbouncer]$ psql -h localhost -p 6432 -U postgres -d postgres
+
+2023-06-10 03:57:23.348 PKT [157283] LOG C-0x55745d681300: postgres/postgres@127.0.0.1:56078 login attempt: db=postgres user=postgres tls=no
+
+And for test user with remote_db:
+remote_db/test@192.168.44.1:62782 login attempt: db=remote_db user=test tls=no
+
+I have checked for all user its not neccassary:
+
+
+[postgres@pg_vm_2 pgbouncer]$ psql -h localhost -p 6432 -U postgres -d test_target
+Password for user postgres:
+psql (14.7)
+Type "help" for help.
+
+2023-06-10 04:10:38.208 PKT [157283] LOG S-0x55745d689550: test_target/postgres@127.0.0.1:5432 new connection to server (from 127.0.0.1:42782)
+
+
+==========================================================================================================================================================
+ 6# Testing using pgbenchmark:
+==========================================================================================================================================================
+
+Check pgbench is installed with postgres default binaries:
+
+[postgres@pg_vm_2 ~]$ ls -ltra /usr/pgsql-14/bin/pgbench
+-rwxr-xr-x. 1 postgres postgres 186712 Feb  9 17:02 /usr/pgsql-14/bin/pgbench
+
+
+Create sql script:
+
+[postgres@pg_vm_2 ~]$ vim load.sql
+
+\set random_id random(1, 100000)
+\set random_value random(1, 100)
+
+SELECT * FROM my_table WHERE random_id = :random_id;
+
+UPDATE my_table SET random_value = :random_value WHERE random_id = :random_id;
+
+
+Run this script with 5 clients using postgres  default port first.
+
+CREATE TABLE my_table
+(
+random_id bigint,
+random_value bigint
+);
+
+[postgres@pg_vm_2 ~]$ vim load.sql
+
+pgbench -h localhost -p 5432 -U postgres -d remote_db -f load.sql -c 5 -j 2 -T 120
+
+
+Results using postgres conncetion with defaul port (which means direct connection with database without using pgbouncer)
+
+transaction type: load.sql
+scaling factor: 1
+query mode: simple
+number of clients: 5
+number of threads: 2
+duration: 120 s
+number of transactions actually processed: 323867
+latency average = 1.852 ms
+initial connection time = 82.640 ms
+tps = 2700.104936 (without initial connection time)
+
+
+
+Now Test with pgbouncer port using pgbouncer conncetion pooling:
+
+pgbench -h localhost -p 6432 -U postgres -d remote_db -f load.sql -c 5 -j 2 -T 120
+
+pgbouncer logs:
+
+2023-06-10 05:09:57.408 PKT [157283] LOG stats: 131 xacts/s, 131 queries/s, in 7912 B/s, out 6959 B/s, xact 515 us, query 515 us, wait 10851 us
+
+Results:
+
+transaction type: load.sql
+scaling factor: 1
+query mode: simple
+number of clients: 5
+number of threads: 2
+duration: 120 s
+number of transactions actually processed: 364300
+latency average = 1.646 ms
+initial connection time = 73.933 ms
+tps = 3037.571660 (without initial connection time)
+
+
+
+If we comapre the results latency average and initial connection time is low using pgbouncer. And the number of transactions excuted in same 
+time is high.
+
+This means pgbouncer connection pooling decrease  the latency and initial connection time and excute more number of transactions as compare to postgres native connections.
+==========================================================================================================================================================
