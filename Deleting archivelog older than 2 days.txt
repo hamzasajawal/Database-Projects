@@ -1,0 +1,86 @@
+Script for Deleting archivelog older than 2 days using rman script:
+
+First list the archives older than 2 days:
+RMAN> LIST ARCHIVELOG ALL COMPLETED BEFORE 'SYSDATE-2';
+
+using target database control file instead of recovery catalog
+List of Archived Log Copies for database with db_unique_name NTLBLPRM
+=====================================================================
+
+Key     Thrd Seq     S Low Time
+------- ---- ------- - -------------------
+43044   1    211629  A 2023-03-17 22:17:40
+        Name: /oracle/oradata/archives/1_211629_942027676.arc
+
+43047   1    211630  A 2023-03-17 22:23:35
+        Name: /oracle/oradata/archives/1_211630_942027676.arc
+
+43050   1    211631  A 2023-03-17 23:05:11
+        Name: /oracle/oradata/archives/1_211631_942027676.arc
+
+43053   1    211632  A 2023-03-17 23:13:02
+        Name: /oracle/oradata/archives/1_211632_942027676.arc
+
+43056   1    211633  A 2023-03-17 23:16:06
+        Name: /oracle/oradata/archives/1_211633_942027676.arc
+
+43059   1    211634  A 2023-03-17 23:21:45
+        Name: /oracle/oradata/archives/1_211634_942027676.arc
+
+43062   1    211635  A 2023-03-18 00:10:08
+        Name: /oracle/oradata/archives/1_211635_942027676.arc
+
+43065   1    211636  A 2023-03-18 00:14:18
+        Name: /oracle/oradata/archives/1_211636_942027676.arc
+
+43068   1    211637  A 2023-03-18 00:17:49
+        Name: /oracle/oradata/archives/1_211637_942027676.arc
+--This output is terminated
+=====================================================================
+We write the below script for testing syntax of this script use rman checksyntax
+[oracle@database-ntlbill-vmcloud ~]$ rman checksyntax
+
+Recovery Manager: Release 11.2.0.4.0 - Production on Wed Mar 22 14:25:28 2023
+
+Copyright (c) 1982, 2011, Oracle and/or its affiliates.  All rights reserved.
+
+RMAN> run
+{
+  allocate channel ch1 type disk;
+  CROSSCHECK ARCHIVELOG ALL;
+  delete noprompt archivelog all completed before 'sysdate-2';
+  release channel ch1;
+}2> 3> 4> 5> 6> 7>
+
+The command has no syntax errors
+=====================================================================
+Now using the script to delte archivelog older than 2 days:
+
+
+rman target / log=/home/oracle/delete_old_archives_log_$(date '+%y%m%d').log << EOF
+run
+{
+  allocate channel ch1 type disk;
+  CROSSCHECK ARCHIVELOG ALL;
+  delete noprompt archivelog all completed before 'sysdate-2';
+  release channel ch1;
+}
+exit
+EOF
+=====================================================================
+Verify the results to check that archivelog older than:
+RMAN> LIST ARCHIVELOG ALL COMPLETED BEFORE 'SYSDATE-2';
+
+using target database control file instead of recovery catalog
+
+
+Script runs successfully we can see that no archivelog older than 2 days available.
+=====================================================================
+
+Now sechulde script using crontab:(This crontab runs 2AM daily)
+
+crontab -e
+###################################Added By Hs#############################
+00 02 * * * /home/oracle/delete_old_archives_rman.sh
+
+=====================================================================
