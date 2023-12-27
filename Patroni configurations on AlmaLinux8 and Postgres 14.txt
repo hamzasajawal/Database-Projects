@@ -1,0 +1,771 @@
+
+Followings are the details for my envirment:
+
+OS version for all nodes:
+
+[postgres@dbnode1 ~]$ cat /etc/os-release
+NAME="AlmaLinux"
+VERSION="8.7 (Stone Smilodon)"
+ID="almalinux"
+ID_LIKE="rhel centos fedora"
+VERSION_ID="8.7"
+PLATFORM_ID="platform:el8"
+PRETTY_NAME="AlmaLinux 8.7 (Stone Smilodon)"
+ANSI_COLOR="0;34"
+LOGO="fedora-logo-icon"
+CPE_NAME="cpe:/o:almalinux:almalinux:8::baseos"
+HOME_URL="https://almalinux.org/"
+DOCUMENTATION_URL="https://wiki.almalinux.org/"
+BUG_REPORT_URL="https://bugs.almalinux.org/"
+
+ALMALINUX_MANTISBT_PROJECT="AlmaLinux-8"
+ALMALINUX_MANTISBT_PROJECT_VERSION="8.7"
+REDHAT_SUPPORT_PRODUCT="AlmaLinux"
+REDHAT_SUPPORT_PRODUCT_VERSION="8.7"
+
+
+Database Node:
+
+dbnode1.com 192.168.44.218
+dbnode2.com 192.168.44.219
+
+Etcd Node:
+
+etcdnode.com 192.168.44.220
+
+HAproxy Node:
+
+haproxynode.com 192.168.44.221
+
+On database Nodes:
+
+Esnure that postgres is installed with contributions.
+
+In my case , on both database nodes postgres 14.7 is installed.
+
+postgres=# SELECT VERSION();
+                                                 version
+---------------------------------------------------------------------------------------------------------
+ PostgreSQL 14.7 on x86_64-pc-linux-gnu, compiled by gcc (GCC) 8.5.0 20210514 (Red Hat 8.5.0-18), 64-bit
+(1 row)
+
+
+Ensure that on all servers(including etcd and haproxy) firewall is disabled:
+
+[postgres@dbnode1 ~]$ sudo systemctl stop firewalld
+[postgres@dbnode1 ~]$ sudo systemctl disable firewalld
+
+
+========================================================================================================================================================================================================================
+
+On ETCD node install etcd:
+
+#Disable selinux.
+
+[root@etcdnode ~]# sudo dnf install etcd
+Waiting for process with pid 7357 to finish.
+AlmaLinux 8 - BaseOS                                                                                                          2.7 kB/s | 3.8 kB     00:01
+No match for argument: etcd
+Error: Unable to find a match: etcd
+
+I DID NOT FOUND ETCD PACKAGE IN REPO SO I WILL INSTALL MANUALLY:
+
+[root@etcdnode ~]# sudo dnf install -y http://mirror.centos.org/centos/7/extras/x86_64/Packages/etcd-3.3.11-2.el7.centos.x86_64.rpm
+Last metadata expiration check: 0:47:11 ago on Thu 10 Aug 2023 10:01:11 AM PKT.
+etcd-3.3.11-2.el7.centos.x86_64.rpm                                                                                           502 kB/s |  10 MB     00:20
+Dependencies resolved.
+==============================================================================================================================================================
+ Package                                 Architecture                  Version                                      Repository                           Size
+==============================================================================================================================================================
+Installing:
+ etcd                                    x86_64                        3.3.11-2.el7.centos                          @commandline                         10 M
+Installing dependencies:
+ compat-openssl10                        x86_64                        1:1.0.2o-4.el8_6                             appstream                           1.1 M
+ make                                    x86_64                        1:4.2.1-11.el8                               baseos                              497 k
+
+Transaction Summary
+==============================================================================================================================================================
+Install  3 Packages
+
+Total size: 12 M
+Total download size: 1.6 M
+Installed size: 49 M
+Downloading Packages:
+(1/2): compat-openssl10-1.0.2o-4.el8_6.x86_64.rpm                                                                             469 kB/s | 1.1 MB     00:02
+(2/2): make-4.2.1-11.el8.x86_64.rpm                                                                                            78 kB/s | 497 kB     00:06
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+Total                                                                                                                         199 kB/s | 1.6 MB     00:08
+Running transaction check
+Transaction check succeeded.
+Running transaction test
+Transaction test succeeded.
+Running transaction
+  Preparing        :                                                                                                                                      1/1
+  Installing       : make-1:4.2.1-11.el8.x86_64                                                                                                           1/3
+  Running scriptlet: make-1:4.2.1-11.el8.x86_64                                                                                                           1/3
+  Installing       : compat-openssl10-1:1.0.2o-4.el8_6.x86_64                                                                                             2/3
+  Running scriptlet: compat-openssl10-1:1.0.2o-4.el8_6.x86_64                                                                                             2/3
+  Running scriptlet: etcd-3.3.11-2.el7.centos.x86_64                                                                                                      3/3
+  Installing       : etcd-3.3.11-2.el7.centos.x86_64                                                                                                      3/3
+  Running scriptlet: etcd-3.3.11-2.el7.centos.x86_64                                                                                                      3/3
+  Verifying        : make-1:4.2.1-11.el8.x86_64                                                                                                           1/3
+  Verifying        : compat-openssl10-1:1.0.2o-4.el8_6.x86_64                                                                                             2/3
+  Verifying        : etcd-3.3.11-2.el7.centos.x86_64                                                                                                      3/3
+
+Installed:
+  compat-openssl10-1:1.0.2o-4.el8_6.x86_64                    etcd-3.3.11-2.el7.centos.x86_64                    make-1:4.2.1-11.el8.x86_64
+
+Complete!
+[root@etcdnode ~]# sudo systemctl start etcd
+[root@etcdnode ~]# systemctl status etcd
+● etcd.service - Etcd Server
+   Loaded: loaded (/usr/lib/systemd/system/etcd.service; disabled; vendor preset: disabled)
+   Active: active (running) since Thu 2023-08-10 11:09:10 PKT; 2s ago
+ Main PID: 101473 (etcd)
+    Tasks: 8 (limit: 12070)
+   Memory: 12.4M
+   CGroup: /system.slice/etcd.service
+           └─101473 /usr/bin/etcd --name=etcd1 --data-dir=/var/lib/etcd/default.etcd --listen-client-urls=http://192.168.44.220:2379
+
+Aug 10 11:09:08 etcdnode.com etcd[101473]: enabled capabilities for version 3.3
+Aug 10 11:09:10 etcdnode.com etcd[101473]: 8e9e05c52164694d is starting a new election at term 4
+Aug 10 11:09:10 etcdnode.com etcd[101473]: 8e9e05c52164694d became candidate at term 5
+Aug 10 11:09:10 etcdnode.com etcd[101473]: 8e9e05c52164694d received MsgVoteResp from 8e9e05c52164694d at term 5
+Aug 10 11:09:10 etcdnode.com etcd[101473]: 8e9e05c52164694d became leader at term 5
+Aug 10 11:09:10 etcdnode.com etcd[101473]: raft.node: 8e9e05c52164694d elected leader 8e9e05c52164694d at term 5
+Aug 10 11:09:10 etcdnode.com etcd[101473]: published {Name:etcd1 ClientURLs:[http://192.168.44.220:2379]} to cluster cdf818194e3a8c32
+Aug 10 11:09:10 etcdnode.com etcd[101473]: ready to serve client requests
+Aug 10 11:09:10 etcdnode.com etcd[101473]: serving insecure client requests on 192.168.44.220:2379, this is strongly discouraged!
+Aug 10 11:09:10 etcdnode.com systemd[1]: Started Etcd Server.
+
+
+OPEN THE ETCD CONFILE AND COMMENT OUT THE BELOW PARAMETER AND ADD THE IP OF YOUR SERVER INSETED OF LOCALHOST AS BELOW:
+
+[root@etcdnode ~]# vim /etc/etcd/etcd.conf
+
+ETCD_DATA_DIR="/var/lib/etcd/default.etcd"
+ETCD_LISTEN_PEER_URLS="http://192.168.44.220:2380"
+ETCD_LISTEN_CLIENT_URLS="http://192.168.44.220:2379"
+ETCD_NAME="etcd1"
+ETCD_INITIAL_ADVERTISE_PEER_URLS="http://192.168.44.220:2380"
+ETCD_ADVERTISE_CLIENT_URLS="http://192.168.44.220:2379"
+ETCD_INITIAL_CLUSTER="etcd1=http://192.168.44.220:2380"
+ETCD_INITIAL_CLUSTER_TOKEN="etcd-cluster"
+ETCD_INITIAL_CLUSTER_STATE="new"
+
+Restart the service and verify:
+[root@etcdnode ~]# systemctl restart etcd
+[root@etcdnode ~]# systemctl status etcd
+● etcd.service - Etcd Server
+   Loaded: loaded (/usr/lib/systemd/system/etcd.service; disabled; vendor preset: disabled)
+   Active: active (running) since Thu 2023-08-10 11:05:11 PKT; 5s ago
+ Main PID: 101403 (etcd)
+    Tasks: 8 (limit: 12070)
+   Memory: 12.4M
+   CGroup: /system.slice/etcd.service
+           └─101403 /usr/bin/etcd --name=etcd1 --data-dir=/var/lib/etcd/default.etcd --listen-client-urls=http://localhost:2379
+
+Aug 10 11:05:09 etcdnode.com etcd[101403]: enabled capabilities for version 3.3
+Aug 10 11:05:11 etcdnode.com etcd[101403]: 8e9e05c52164694d is starting a new election at term 2
+Aug 10 11:05:11 etcdnode.com etcd[101403]: 8e9e05c52164694d became candidate at term 3
+Aug 10 11:05:11 etcdnode.com etcd[101403]: 8e9e05c52164694d received MsgVoteResp from 8e9e05c52164694d at term 3
+Aug 10 11:05:11 etcdnode.com etcd[101403]: 8e9e05c52164694d became leader at term 3
+Aug 10 11:05:11 etcdnode.com etcd[101403]: raft.node: 8e9e05c52164694d elected leader 8e9e05c52164694d at term 3
+Aug 10 11:05:11 etcdnode.com etcd[101403]: published {Name:etcd1 ClientURLs:[http://192.168.44.220:2379]} to cluster cdf818194e3a8c32
+Aug 10 11:05:11 etcdnode.com etcd[101403]: ready to serve client requests
+Aug 10 11:05:11 etcdnode.com etcd[101403]: serving insecure client requests on 127.0.0.1:2379, this is strongly discouraged!
+Aug 10 11:05:11 etcdnode.com systemd[1]: Started Etcd Server.
+
+==============================================================================================================================================================
+
+On database Nodes:
+
+Install dependencies of postgres and patroni on both database nodes:
+
+FOR dbnode1:
+[postgres@dbnode1 ~]$ sudo dnf install postgresql-devel
+[postgres@dbnode1 ~]$ sudo dnf install python3-pip -y
+[postgres@dbnode1 ~]$ sudo dnf install libpq*
+[postgres@dbnode1 ~]$ sudo dnf install python*dev -y
+[postgres@dbnode1 ~]$ sudo dnf install python3-devel
+
+[postgres@dbnode1 ~]$ python3 -m pip --version
+pip 9.0.3 from /usr/lib/python3.6/site-packages (python 3.6)
+
+[postgres@dbnode1 ~]$ sudo python3 -m pip install patroni
+[postgres@dbnode1 ~]$ sudo python3 -m pip install python-etcd
+[postgres@dbnode1 ~]$ sudo python3 -m pip install psycopg2
+
+FOR dbnode2:
+
+[postgres@dbnode2 ~]$ sudo dnf install postgresql-devel
+[postgres@dbnode2 ~]$ sudo dnf install python3-pip -y
+[postgres@dbnode2 ~]$ sudo dnf install libpq*
+[postgres@dbnode2 ~]$ sudo dnf install python*dev -y
+[postgres@dbnode2 ~]$ sudo dnf install python3-devel
+
+[postgres@dbnode2 ~]$ python3 -m pip --version
+pip 9.0.3 from /usr/lib/python3.6/site-packages (python 3.6)
+
+[postgres@dbnode2 ~]$ sudo python3 -m pip install patroni
+[postgres@dbnode2 ~]$ sudo python3 -m pip install python-etcd
+[postgres@dbnode2 ~]$ sudo python3 -m pip install psycopg2
+
+==============================================================================================================================================================
+create a patroni.yml file on both dbnode1 and dbnode2:
+
+==============================================================================================================================================================
+ON HAPROXY NODE:
+
+
+
+[root@haproxynode ~]# dnf update
+[root@haproxynode ~]# dnf install -y haproxy
+
+[root@haproxynode ~]# vim /etc/selinux/config
+SELINUX=permissive
+
+[root@haproxynode ~]# vim /etc/haproxy/haproxy.cfg
+
+[root@haproxynode ~]# cat /etc/haproxy/haproxy.cfg
+global
+    maxconn 100
+    log 127.0.0.1 local2
+
+defaults
+    log global
+    mode tcp
+    retries 2
+    timeout client 30m
+    timeout connect 4s
+    timeout server 30m
+    timeout check 5s
+
+listen stats
+    mode http
+    bind *:7000
+    stats enable
+    stats uri /
+
+listen postgres
+    bind *:5000
+    option tcp-check  # Change to TCP check
+    default-server inter 3s fall 3 rise 2 on-marked-down shutdown-sessions
+    server dbnode1 192.168.44.218:5432 maxconn 100 check port 8008
+    server dbnode2 192.168.44.219:5432 maxconn 100 check port 8008
+
+
+[root@haproxynode ~]# sudo setsebool -P haproxy_connect_any 1
+
+[root@haproxynode ~]# systemctl start haproxy.service
+[root@haproxynode ~]# sudo systemctl status haproxy
+● haproxy.service - HAProxy Load Balancer
+   Loaded: loaded (/usr/lib/systemd/system/haproxy.service; disabled; vendor preset: disabled)
+   Active: active (running) since Fri 2023-08-11 11:34:54 PKT; 29min ago
+  Process: 110205 ExecStartPre=/usr/sbin/haproxy -f $CONFIG -f $CFGDIR -c -q $OPTIONS (code=exited, status=0/SUCCESS)
+ Main PID: 110208 (haproxy)
+    Tasks: 2 (limit: 12070)
+   Memory: 1.8M
+   CGroup: /system.slice/haproxy.service
+           ├─110208 /usr/sbin/haproxy -Ws -f /etc/haproxy/haproxy.cfg -f /etc/haproxy/conf.d -p /run/haproxy.pid
+           └─110210 /usr/sbin/haproxy -Ws -f /etc/haproxy/haproxy.cfg -f /etc/haproxy/conf.d -p /run/haproxy.pid
+
+Aug 11 11:34:54 haproxynode.com systemd[1]: Starting HAProxy Load Balancer...
+Aug 11 11:34:54 haproxynode.com systemd[1]: Started HAProxy Load Balancer.
+
+CHECK HAPROXY CONFGIGURATION IS OKAY OR NOT:
+
+[root@haproxynode ~]# haproxy -c -f /etc/haproxy/haproxy.cfg
+Configuration file is valid
+
+TEST CONNECTION:
+[root@haproxynode ~]# haproxy -f /etc/haproxy/haproxy.cfg -d
+Available polling systems :
+      epoll : pref=300,  test result OK
+       poll : pref=200,  test result OK
+     select : pref=150,  test result OK
+Total: 3 (3 usable), will use epoll.
+
+Available filters :
+        [SPOE] spoe
+        [COMP] compression
+        [TRACE] trace
+Using epoll() as the polling mechanism.
+
+
+==============================================================================================================================================================
+NOW CREATE PATRONI.YML FILE ON BOTH DB NODES:
+
+ON dbnode1:
+[postgres@dbnode1 etc]$ sudo vim /etc/patroni.yml
+scope: postgres
+namespace: /db/
+name: p1
+
+restapi:
+    listen: 192.168.44.218:8008
+    connect_address: 192.168.44.218:8008
+
+etcd:
+    host: 192.168.44.220:2379
+
+bootstrap:
+    dcs:
+        ttl: 30
+        loop_wait: 10
+        retry_timeout: 10
+        maximum_lag_on_failover: 1048576
+        postgresql:
+            use_pg_rewind: true
+            use_slots: true
+            parameters:
+                    max_replication_slots: 5
+                    wal_level: replica
+                    hot_standby: on
+                    max_wal_senders: 5
+
+    initdb:
+    - encoding: UTF8
+    - data-checksums
+
+    pg_hba:
+    - host replication replicator 127.0.0.1/32 md5
+    - host replication replicator 192.168.44.218/0 md5
+    - host replication replicator 192.168.44.219/0 md5
+    - host all all 0.0.0.0/0 md5
+
+    users:
+        admin:
+            password: admin
+            options:
+                - createrole
+                - createdb
+
+postgresql:
+    listen: 192.168.44.219:5432
+    connect_address: 192.168.44.219:5432
+    data_dir: /home/postgres/data
+    pgpass: /tmp/pgpass
+    authentication:
+        replication:
+            username: replicator
+            password: password
+        superuser:
+            username: postgres
+            password: password
+    parameters:
+        unix_socket_directories: '.'
+
+tags:
+    nofailover: false
+    noloadbalance: false
+    clonefrom: false
+    nosync: false
+
+postgres=# CREATE USER replicator WITH REPLICATION LOGIN  PASSWORD 'password';
+CREATE ROLE
+postgres=# \du
+                                    List of roles
+ Role name  |                         Attributes                         | Member of
+------------+------------------------------------------------------------+-----------
+ postgres   | Superuser, Create role, Create DB, Replication, Bypass RLS | {}
+ replicator | Replication                                                | {}
+
+postgres=# \password postgres
+Enter new password for user "postgres":
+Enter it again:
+=================================================
+ON dbnode2:
+
+[postgres@dbnode2 ~]$ sudo vim /etc/patroni.yml
+
+scope: postgres
+namespace: /db/
+name: p3
+
+restapi:
+    listen: 192.168.44.219:8008
+    connect_address: 192.168.44.219:8008
+
+etcd:
+    host: 192.168.44.220:2379
+
+bootstrap:
+    dcs:
+        ttl: 30
+        loop_wait: 10
+        retry_timeout: 10
+        maximum_lag_on_failover: 1048576
+        postgresql:
+            use_pg_rewind: true
+            use_slots: true
+            parameters:
+                    max_replication_slots: 5
+                    wal_level: replica
+                    hot_standby: on
+                    max_wal_senders: 5
+
+    initdb:
+    - encoding: UTF8
+    - data-checksums
+
+    pg_hba:
+    - host replication replicator 127.0.0.1/32 md5
+    - host replication replicator 192.168.44.218/0 md5
+    - host replication replicator 192.168.44.219/0 md5
+    - host all all 0.0.0.0/0 md5
+
+    users:
+        admin:
+            password: admin
+            options:
+                - createrole
+                - createdb
+
+postgresql:
+    listen: 192.168.44.219:5432
+    connect_address: 192.168.44.219:5432
+    data_dir: /home/postgres/data
+    pgpass: /tmp/pgpass
+    authentication:
+        replication:
+            username: replicator
+            password: password
+        superuser:
+            username: postgres
+            password: password
+    parameters:
+        unix_socket_directories: '.'
+
+tags:
+    nofailover: false
+    noloadbalance: false
+    clonefrom: false
+    nosync: false
+
+postgres=# CREATE USER replicator WITH REPLICATION LOGIN  PASSWORD 'password';
+CREATE ROLE
+postgres=# \password postgres
+Enter new password for user "postgres":
+Enter it again:
+
+==============================================================================================================================================================
+CREATE PATRONI SERVICE FILE ON BOTH DATABASE NODES:
+
+ON dbnode1:
+[postgres@dbnode1 ~]$ sudo vim /etc/systemd/system/patroni.service
+
+[postgres@dbnode1 ~]$ cat /etc/systemd/system/patroni.service
+[Unit]
+Description=Runners to orchestrate a high-availability PostgreSQL
+After=syslog.target network.target
+
+[Service]
+Type=simple
+
+User=postgres
+Group=postgres
+Environment=PATH=/home/postgres/bin:$PATH
+WorkingDirectory=/home/postgres
+ExecStart=/usr/local/bin/patroni /etc/patroni.yml
+KillMode=process
+TimeoutSec=30
+Restart=no
+
+[Install]
+WantedBy=multi-user.target
+
+
+[root@dbnode1 ~]# chown -R postgres /etc/systemd/system/patroni.service
+[root@dbnode1 ~]# chown -R postgres /etc/patroni.yml
+
+[postgres@dbnode1 ~]$ sudo systemctl start patroni.service
+[postgres@dbnode1 ~]$ sudo systemctl status patroni.service
+● patroni.service - Runners to orchestrate a high-availability PostgreSQL
+   Loaded: loaded (/etc/systemd/system/patroni.service; disabled; vendor preset: disabled)
+   Active: active (running) since Thu 2023-08-10 16:37:06 PKT; 41s ago
+ Main PID: 9041 (patroni)
+    Tasks: 13 (limit: 12070)
+   Memory: 72.1M
+   CGroup: /system.slice/patroni.service
+           ├─9041 /bin/python3 /usr/local/bin/patroni /etc/patroni.yml
+           ├─9080 postgres -D /home/postgres/data --config-file=/home/postgres/data/postgresql.conf --listen_addresses=192.168.44.218 --port=5432 --cluster_n>
+           ├─9083 postgres: postgres: checkpointer
+           ├─9084 postgres: postgres: background writer
+           ├─9085 postgres: postgres: stats collector
+           ├─9090 postgres: postgres: postgres postgres 192.168.44.218(46896) idle
+           ├─9097 postgres: postgres: walwriter
+           ├─9098 postgres: postgres: autovacuum launcher
+           └─9099 postgres: postgres: logical replication launcher
+
+Aug 10 16:37:08 dbnode1.com patroni[9041]:     ret = _connect(*args, **kwargs)
+Aug 10 16:37:08 dbnode1.com patroni[9041]:   File "/usr/local/lib64/python3.6/site-packages/psycopg2/__init__.py", line 122, in connect
+Aug 10 16:37:08 dbnode1.com patroni[9041]:     conn = _connect(dsn, connection_factory=connection_factory, **kwasync)
+Aug 10 16:37:08 dbnode1.com patroni[9041]: psycopg2.OperationalError: FATAL:  no pg_hba.conf entry for replication connection from host "192.168.44.218", use>
+Aug 10 16:37:08 dbnode1.com patroni[9082]: 2023-08-10 16:37:08.636 PKT [9082] LOG:  archive recovery complete
+Aug 10 16:37:08 dbnode1.com patroni[9080]: 2023-08-10 16:37:08.638 PKT [9080] LOG:  database system is ready to accept connections
+Aug 10 16:37:09 dbnode1.com patroni[9041]: 2023-08-10 16:37:09,461 INFO: no action. I am (p1), the leader with the lock
+Aug 10 16:37:19 dbnode1.com patroni[9041]: 2023-08-10 16:37:19,453 INFO: no action. I am (p1), the leader with the lock
+Aug 10 16:37:29 dbnode1.com patroni[9041]: 2023-08-10 16:37:29,459 INFO: no action. I am (p1), the leader with the lock
+Aug 10 16:37:39 dbnode1.com patroni[9041]: 2023-08-10 16:37:39,455 INFO: no action. I am (p1), the leader with the lock
+
+ON dbnode2:
+
+[postgres@dbnode2 ~]$ sudo vim /etc/systemd/system/patroni.service
+
+[Unit]
+Description=Runners to orchestrate a high-availability PostgreSQL
+After=syslog.target network.target
+
+[Service]
+Type=simple
+
+User=postgres
+Group=postgres
+Environment=PATH=/home/postgres/bin/bin:$PATH
+WorkingDirectory=/home/postgres
+ExecStart=/usr/local/bin/patroni /etc/patroni.yml
+KillMode=process
+TimeoutSec=30
+Restart=no
+
+[Install]
+WantedBy=multi-user.target
+
+[root@dbnode2 ~]# chown -R postgres /etc/systemd/system/patroni.service
+[root@dbnode2 ~]# chown -R postgres /etc/patroni.yml
+
+[postgres@dbnode2 ~]$ systemctl start patroni.service
+[postgres@dbnode2 ~]$ systemctl status patroni.service
+● patroni.service - Runners to orchestrate a high-availability PostgreSQL
+   Loaded: loaded (/etc/systemd/system/patroni.service; disabled; vendor preset: disabled)
+   Active: active (running) since Thu 2023-08-10 17:32:20 PKT; 3min 36s ago
+ Main PID: 10089 (patroni)
+    Tasks: 12 (limit: 12070)
+   Memory: 59.3M
+   CGroup: /system.slice/patroni.service
+           ├─10089 /bin/python3 /usr/local/bin/patroni /etc/patroni.yml
+           ├─10130 postgres -D /home/postgres/data --config-file=/home/postgres/data/postgresql.conf --listen_addresses=192.168.44.219 --port=5432 --cluster_>
+           ├─10132 postgres: postgres: startup recovering 000000040000000000000003
+           ├─10133 postgres: postgres: checkpointer
+           ├─10134 postgres: postgres: background writer
+           ├─10135 postgres: postgres: stats collector
+           ├─10136 postgres: postgres: walreceiver streaming 0/3000060
+           └─10138 postgres: postgres: postgres postgres 192.168.44.219(51812) idle
+
+Aug 10 17:34:25 dbnode2.com patroni[10089]: 2023-08-10 17:34:25,857 INFO: no action. I am (p3), a secondary, and following a leader (p1)
+Aug 10 17:34:35 dbnode2.com patroni[10089]: 2023-08-10 17:34:35,857 INFO: no action. I am (p3), a secondary, and following a leader (p1)
+Aug 10 17:34:45 dbnode2.com patroni[10089]: 2023-08-10 17:34:45,859 INFO: no action. I am (p3), a secondary, and following a leader (p1)
+Aug 10 17:34:55 dbnode2.com patroni[10089]: 2023-08-10 17:34:55,857 INFO: no action. I am (p3), a secondary, and following a leader (p1)
+Aug 10 17:35:05 dbnode2.com patroni[10089]: 2023-08-10 17:35:05,857 INFO: no action. I am (p3), a secondary, and following a leader (p1)
+Aug 10 17:35:15 dbnode2.com patroni[10089]: 2023-08-10 17:35:15,860 INFO: no action. I am (p3), a secondary, and following a leader (p1)
+Aug 10 17:35:25 dbnode2.com patroni[10089]: 2023-08-10 17:35:25,858 INFO: no action. I am (p3), a secondary, and following a leader (p1)
+Aug 10 17:35:35 dbnode2.com patroni[10089]: 2023-08-10 17:35:35,856 INFO: no action. I am (p3), a secondary, and following a leader (p1)
+Aug 10 17:35:45 dbnode2.com patroni[10089]: 2023-08-10 17:35:45,857 INFO: no action. I am (p3), a secondary, and following a leader (p1)
+Aug 10 17:35:55 dbnode2.com patroni[10089]: 2023-08-10 17:35:55,867 INFO: no action. I am (p3), a secondary, and following a leader (p1)
+==============================================================================================================================================================
+If patroni configuration has no error then status must be:
+Test:
+
+[postgres@dbnode1 ~]$  patronictl -c /etc/patroni.yml list
++ Cluster: postgres ------+---------+-----------+----+-----------+-----------------+
+| Member | Host           | Role    | State     | TL | Lag in MB | Pending restart |
++--------+----------------+---------+-----------+----+-----------+-----------------+
+| p1     | 192.168.44.218 | Leader  | running   |  4 |           | *               |
+| p3     | 192.168.44.219 | Replica | streaming |  4 |         0 | *               |
+
+
+Stop patroni on p1:
+[postgres@dbnode1 ~]$ sudo systemctl stop patroni.service
+And then check from p3:
+
+[postgres@dbnode2 ~]$ patronictl -c /etc/patroni.yml list
++ Cluster: postgres ------+---------+---------+----+-----------+-----------------+
+| Member | Host           | Role    | State   | TL | Lag in MB | Pending restart |
++--------+----------------+---------+---------+----+-----------+-----------------+
+| p1     | 192.168.44.218 | Replica | stopped |    |   unknown | *               |
+| p3     | 192.168.44.219 | Leader  | running |  5 |           | *               |
++--------+----------------+---------+---------+----+-----------+-----------------+
+
+Now we can see above after stoping patroni on p1 , p3 becomes leader.
+Again start patroni on p1 and we can see that now p1 is replica and p3 is leader:
+
+[postgres@dbnode1 ~]$  patronictl -c /etc/patroni.yml list
++ Cluster: postgres ------+---------+---------+----+-----------+-----------------+
+| Member | Host           | Role    | State   | TL | Lag in MB | Pending restart |
++--------+----------------+---------+---------+----+-----------+-----------------+
+| p1     | 192.168.44.218 | Replica | running |    |         0 | *               |
+| p3     | 192.168.44.219 | Leader  | running |  5 |           | *               |
++--------+----------------+---------+---------+----+-----------+-----------------+
+==============================================================================================================================================================
+
+TEST CONNECTION USING CLINET:
+DBEVER:
+
+ENTER THE IP OF HAPROXY 192.168.44.221 ADD CREDENTIALS FOR DATABASE USER.
+ENTER THE HAPROXY PORT WHICH WE HAVE DEFINED IN HAPROXY CONFIGURATIONS IN PARAMTER>>"bind *:5000"
+PORT 5000
+
+TEST CONNECTION:
+Connected(51ms)
+PostgreSQL 14.7
+PostgreSQL 14.7 on x86_64-pc-linux-gnu, compiled by gcc (GCC) 8.5.0 20210514 (Red Hat 8.5.0-18), 64-bit
+
+postgres=# create database testpat;
+CREATE DATABASE
+
+postgres=# \c testpat
+You are now connected to database "testpat" as user "postgres".
+
+testpat=# create table test_table ( id int,name varchar(30));
+CREATE TABLE
+testpat=# \d
+           List of relations
+ Schema |    Name    | Type  |  Owner
+--------+------------+-------+----------
+ public | test_table | table | postgres
+(1 row)
+
+testpat=# insert into test_table values (1,'name1');
+INSERT 0 1
+
+Verify from current replica:
+[postgres@dbnode2 data]$ patronictl -c /etc/patroni.yml list
++ Cluster: postgres ------+---------+---------+----+-----------+-----------------+
+| Member | Host           | Role    | State   | TL | Lag in MB | Pending restart |
++--------+----------------+---------+---------+----+-----------+-----------------+
+| p1     | 192.168.44.218 | Replica | running |    |         0 | *               |
+| p3     | 192.168.44.219 | Leader  | running |  5 |           | *               |
++--------+----------------+---------+---------+----+-----------+-----------------+
+
+[postgres@dbnode1 ~]$ /home/postgres/bin/psql -h 192.168.44.218 -p 5432 -U postgres
+Password for user postgres:
+psql (14.7)
+Type "help" for help.
+
+testpat=# \d
+           List of relations
+ Schema |    Name    | Type  |  Owner
+--------+------------+-------+----------
+ public | test_table | table | postgres
+(1 row)
+
+testpat=# select * from test_table;
+ id | name
+----+-------
+  1 | name1
+(1 row)
+
+
+
+
+
+==============================================================================================================================================================
+ERROR FACED:
+
+While starting patroni on dbnode2:
+[postgres@dbnode2 ~]$ sudo systemctl status patroni.service
+● patroni.service - Runners to orchestrate a high-availability PostgreSQL
+   Loaded: loaded (/etc/systemd/system/patroni.service; disabled; vendor preset: disabled)
+   Active: active (running) since Thu 2023-08-10 17:24:00 PKT; 5s ago
+ Main PID: 9634 (patroni)
+    Tasks: 6 (limit: 12070)
+   Memory: 24.1M
+   CGroup: /system.slice/patroni.service
+           └─9634 /bin/python3 /usr/local/bin/patroni /etc/patroni.yml
+
+Aug 10 17:24:00 dbnode2.com systemd[1]: Started Runners to orchestrate a high-availability PostgreSQL.
+Aug 10 17:24:00 dbnode2.com patroni[9634]: 2023-08-10 17:24:00,931 WARNING: Retrying (Retry(total=2, connect=None, read=None, redirect=None, status=None)) af>
+Aug 10 17:24:00 dbnode2.com patroni[9634]: 2023-08-10 17:24:00,931 WARNING: Retrying (Retry(total=1, connect=None, read=None, redirect=None, status=None)) af>
+Aug 10 17:24:00 dbnode2.com patroni[9634]: 2023-08-10 17:24:00,931 WARNING: Retrying (Retry(total=0, connect=None, read=None, redirect=None, status=None)) af>
+Aug 10 17:24:00 dbnode2.com patroni[9634]: 2023-08-10 17:24:00,934 INFO: No PostgreSQL configuration items changed, nothing to reload.
+Aug 10 17:24:00 dbnode2.com patroni[9634]: 2023-08-10 17:24:00,951 INFO: Lock owner: p1; I am p3
+Aug 10 17:24:00 dbnode2.com patroni[9634]: 2023-08-10 17:24:00,954 INFO: trying to bootstrap from leader 'p1'
+Aug 10 17:24:00 dbnode2.com patroni[9634]: 2023-08-10 17:24:00,961 ERROR: Error when fetching backup: pg_basebackup exited with code=1
+Aug 10 17:24:00 dbnode2.com patroni[9634]: 2023-08-10 17:24:00,962 WARNING: Trying again in 5 seconds
+
+Aug 10 17:11:09 dbnode2.com patroni[9024]: pg_basebackup: error: connection to server at "192.168.44.218", port 5432 failed: FATAL:  no pg_hba.conf entry for>
+Aug 10 17:11:09 dbnode2.com patroni[8893]: 2023-08-10 17:11:09,230 ERROR: Error when fetching backup: pg_basebackup exited with code=1
+Aug 10 17:11:09 dbnode2.com patroni[8893]: 2023-08-10 17:11:09,230 WARNING: Trying again in 5 seconds
+
+Solution partially completed:
+
+Add below in pg_hba of dbnode1 and reload:
+
+host    replication     replicator      192.168.44.219/32       md5 
+
+And when reload faced:
+[postgres@dbnode1 ~]$ psql -U postgres -c "SELECT pg_reload_conf();"
+psql: error: connection to server on socket "/tmp/.s.PGSQL.5432" failed: No such file or directory
+        Is the server running locally and accepting connections on that socket?
+
+But server is running:
+[postgres@dbnode1 ~]$ /home/postgres/bin/pg_ctl -D /home/postgres/data -l logfile status
+pg_ctl: server is running (PID: 10247)
+/home/postgres/bin/postgres "-D" "/home/postgres/data" "--config-file=/home/postgres/data/postgresql.conf" "--listen_addresses=192.168.44.218" "--port=5432" "--cluster_name=postgres" "--wal_level=replica" "--hot_standby=True" "--max_connections=100" "--max_wal_senders=10" "--max_prepared_transactions=0" "--max_locks_per_transaction=64" "--track_commit_timestamp=off" "--max_replication_slots=5" "--max_worker_processes=8" "--wal_log_hints=on"
+
+Solution:
+[postgres@dbnode1 ~]$ /home/postgres/bin/psql -h 192.168.44.218 -p 5432 -U postgres
+Password for user postgres:
+psql (14.7)
+Type "help" for help.
+
+postgres=# SELECT pg_reload_conf();
+ pg_reload_conf
+----------------
+ t
+(1 row)
+
+
+==============================================================================================================================================================
+
+Acess haproxy GUI:
+http://<haproxynode_ip>:7000/>
+
+http://192.168.44.221:7000/
+
+Check Replication status:
+
+postgres=# select * from pg_stat_wal_receiver;
+-[ RECORD 1 ]---------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+pid                   | 71339
+status                | streaming
+receive_start_lsn     | 0/3000000
+receive_start_tli     | 5
+written_lsn           | 0/3026FC0
+flushed_lsn           | 0/3026FC0
+received_tli          | 5
+last_msg_send_time    | 2023-08-11 14:39:28.384652+05
+last_msg_receipt_time | 2023-08-11 14:39:27.915199+05
+latest_end_lsn        | 0/3026FC0
+latest_end_time       | 2023-08-11 14:18:55.74812+05
+slot_name             | p1
+sender_host           | 192.168.44.219
+sender_port           | 5432
+conninfo              | user=replicator passfile=/tmp/pgpass channel_binding=prefer dbname=replication host=192.168.44.219 port=5432 application_name=p1 fallback_application_name=postgres sslmode=prefer sslcompression=0 sslsni=1 ssl_min_protocol_version=TLSv1.2 gssencmode=prefer krbsrvname=postgres target_session_attrs=any
+==============================================================================================================================================================
+
+Considrations:
+
+For configuring patroni network connectivity must be available on ports used in all nodes.
+Firewall and se linux is disabled on all nodes.
+pg_hba entry must be added on all database nodes for each other, for replication.
+
+
+Set logging on database server on both nodes:
+
+ALTER SYSTEM SET logging_collector = 'on';
+ALTER SYSTEM SET log_directory = '/home/postgres/logs';
+ALTER SYSTEM SET log_filename = 'postgresql_%Y-%m-%d.log';
+
+Restart:
+[postgres@dbnode1 ~]$ /home/postgres/bin/pg_ctl -D /home/postgres/data  restart
+[postgres@dbnode1 ~]$ sudo systemctl restart patroni.service
+[postgres@dbnode1 ~]$ patronictl -c /etc/patroni.yml list
++ Cluster: postgres ------+---------+-----------+----+-----------+
+| Member | Host           | Role    | State     | TL | Lag in MB |
++--------+----------------+---------+-----------+----+-----------+
+| p1     | 192.168.44.218 | Replica | streaming |  5 |         0 |
+| p3     | 192.168.44.219 | Leader  | running   |  5 |           |
++--------+----------------+---------+-----------+----+-----------+
+==============================================================================================================================================================
