@@ -1,0 +1,72 @@
+Data Guard Physical Standby Switchover Best Practices
+
+Verify Managed Recovery is running on the standby:
+
+SELECT PROCESS FROM V$MANAGED_STANDBY WHERE PROCESS LIKE 'MRP%';
+
+The following query at the Primary verifies that recovery is running with “REAL TIME APPLY” option (DEST_ID IS STANDBY DESTINATION)
+
+SELECT RECOVERY_MODE FROM V$ARCHIVE_DEST_STATUS WHERE DEST_ID=2;
+
+Verify there are no large Gaps:
+
+Identify the current sequence number for each thread on the primary database:
+
+SQL> SELECT THREAD#, SEQUENCE# FROM V$THREAD;
+
+Verify the target physical standby database has applied up to
+
+SQL> SELECT THREAD#, MAX(SEQUENCE#) FROM V$ARCHIVED_LOG
+     WHERE APPLIED = 'YES'
+     AND RESETLOGS_CHANGE# = (SELECT RESETLOGS_CHANGE#
+     FROM V$DATABASE_INCARNATION WHERE STATUS = ‘CURRENT’)
+     GROUP BY THREAD#;
+
+Verify Primary and Standby tempfiles match and all datafiles are ONLINE:
+
+SQL> SELECT TMP.NAME FILENAME, BYTES, TS.NAME TABLESPACE
+     FROM V$TEMPFILE TMP, V$TABLESPACE TS WHERE TMP.TS#=TS.TS#;
+
+On the target standby:
+
+SQL> SELECT NAME FROM V$DATAFILE WHERE STATUS=’OFFLINE’;
+
+Capture current job state on the primary:
+SELECT * FROM DBA_JOBS_RUNNING;
+
+Depending on what the running job is,terminate the job if necessary.
+
+SQL> SELECT OWNER, JOB_NAME, START_DATE, END_DATE, ENABLED FROM 
+     DBA_SCHEDULER_JOBS WHERE ENABLED=’TRUE’ AND OWNER <> ‘SYS”;
+
+SQL> SHOW PARAMETER job_queue_processes
+
+Tail the alert logs
+
+> tail –f <background_dump_dest location>/alert*
+
+Switchover:
+
+Query the SWITCHOVER_STATUS column of the V$DATABASE view on the primary database:
+
+SQL> SELECT SWITCHOVER_STATUS FROM V$DATABASE;
+
+Primary Side:
+
+SQL> alter system archive log current;
+
+SQL> alter database commit to switchover to standby with session shutdown;
+
+SQL> shutdown immediate;
+
+SQL> startup mount;
+
+Standby Side:
+
+SQL> alter database recover managed standby database cancel;
+
+SQL> alter database commit to switchover to primary with session shutdown;
+
+SQL> shutdown immediate;
+
+SQL> startup;
