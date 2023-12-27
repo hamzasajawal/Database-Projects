@@ -1,0 +1,171 @@
+Configuring postgres_fdw:
+
+Consdiration:
+
+We do not need to install postgres_fdw on any machine we just need postgres contrib package for create extension:
+
+
+===================================================================
+In this case we are allowing subnet for both we can use specfic ip:
+Add the entry in pg_hba of source database:
+
+
+host    all             all             192.168.44.0/24         scram-sha-256
+
+[postgres@localhost ~]$ psql -c "SELECT pg_reload_conf();"
+
+Add the entry in pg_hba of target database:
+
+host    all             all             192.168.44.0/24         scram-sha-256
+
+psql -c "SELECT pg_reload_conf();"
+===================================================================
+
+CREATE EXTENSION:
+
+On database Where we want to acess the the table of other database (source):
+
+
+In our case source database name is remote_db:
+
+postgres=# \c remote_db
+You are now connected to database "remote_db" as user "postgres".
+remote_db=# create extension postgres_fdw;
+CREATE EXTENSION
+
+
+remote_db=# \dx
+                               List of installed extensions
+     Name     | Version |   Schema   |                    Description
+--------------+---------+------------+----------------------------------------------------
+ plpgsql      | 1.0     | pg_catalog | PL/pgSQL procedural language
+ postgres_fdw | 1.1     | public     | foreign-data wrapper for remote PostgreSQL servers
+(2 rows)
+
+
+remote_db=# select * from pg_extension;
+  oid  |   extname    | extowner | extnamespace | extrelocatable | extversion | extconfig | extcondition
+-------+--------------+----------+--------------+----------------+------------+-----------+--------------
+ 14684 | plpgsql      |       10 |           11 | f              | 1.0        |           |
+ 16385 | postgres_fdw |       10 |         2200 | t              | 1.1        |           |
+
+
+===================================================================
+
+Create server on source db for target:
+
+
+remote_db=# CREATE SERVER pg_local_fs FOREIGN DATA WRAPPER postgres_fdw  OPTIONS (dbname 'postgres', host '192.168.44.198', port '5432');
+CREATE SERVER
+
+remote_db=# \des+
+                                                                  List of foreign servers
+    Name     |  Owner   | Foreign-data wrapper | Access privileges | Type | Version |                       FDW options                       | Description
+-------------+----------+----------------------+-------------------+------+---------+---------------------------------------------------------+-------------
+ pg_local_fs | postgres | postgres_fdw         |                   |      |         | (dbname 'postgres', host '192.168.44.198', port '5432') |
+
+
+remote_db=# select * from pg_foreign_server;
+  oid  |   srvname   | srvowner | srvfdw | srvtype | srvversion | srvacl |                   srvoptions
+-------+-------------+----------+--------+---------+------------+--------+-------------------------------------------------
+ 16392 | pg_local_fs |       10 |  16388 |         |            |        | {dbname=postgres,host=192.168.44.198,port=5432}
+(1 row)
+
+remote_db=# GRANT USAGE ON FOREIGN SERVER pg_local_fs TO postgres;
+GRANT
+
+===================================================================
+
+
+Create user on target (Where data lies) with below permissions:
+
+postgres=# CREATE USER fdw_user WITH LOGIN PASSWORD '123';
+CREATE ROLE
+postgres=# GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO fdw_user;
+GRANT
+postgres=# ALTER ROLE fdw_user WITH REPLICATION;
+ALTER ROLE
+
+postgres=# \du
+                                     List of roles
+  Role name   |                         Attributes                         | Member of
+--------------+------------------------------------------------------------+-----------
+ fdw_user     | Replication                                                | {}
+ limited_user |                                                            | {}
+ postgres     | Superuser, Create role, Create DB, Replication, Bypass RLS | {}
+ src          | Superuser, Create role, Create DB                          | {}
+ test_user    | Superuser                                                  | {}
+
+
+===================================================================
+
+Create User Mapping(source):
+
+remote_db=# CREATE USER MAPPING for postgres SERVER pg_local_fs OPTIONS (user 'fdw_user', password '123');
+CREATE USER MAPPING
+
+remote_db=# select * from pg_user_mappings;
+ umid  | srvid |   srvname   | umuser | usename  |          umoptions
+-------+-------+-------------+--------+----------+------------------------------
+ 16393 | 16392 | pg_local_fs |     10 | postgres | {user=fdw_user,password=123}
+(1 row)
+
+===================================================================
+
+--Create foreign table in source database w.r.t actual table in target database:
+
+remote_db=# CREATE FOREIGN TABLE f_customers
+remote_db-# (
+remote_db(#  name  character varying(50),
+remote_db(#  email character varying(100),
+remote_db(#  state_code character varying(2))
+remote_db-# SERVER pg_local_fs OPTIONS (schema_name 'public', table_name 'customers');
+CREATE FOREIGN TABLE
+
+remote_db=# select * from information_schema.foreign_tables;
+ foreign_table_catalog | foreign_table_schema | foreign_table_name | foreign_server_catalog | foreign_server_name
+-----------------------+----------------------+--------------------+------------------------+---------------------
+ remote_db             | public               | f_customers        | remote_db              | pg_local_fs
+(1 row)
+
+remote_db=# \d
+                List of relations
+ Schema |    Name     |     Type      |  Owner
+--------+-------------+---------------+----------
+ public | f_customers | foreign table | postgres
+
+
+Create original table in source database:
+
+remote_db=# CREATE TABLE customers
+remote_db-# (
+remote_db(#  name  character varying(50),
+remote_db(#  email character varying(100),
+remote_db(#  state_code character varying(2)
+remote_db(#  );
+CREATE TABLE
+
+Insert data into original table from foreign table:
+
+remote_db=# INSERT INTO customers select * from f_customers;
+INSERT 0 7
+
+===================================================================
+
+Importing foreign schema into local schema:
+
+Here test is the local schema and my_schema is foreign schema:
+
+remote_db=# CREATE SCHEMA TEST;
+CREATE SCHEMA
+remote_db=# \dn
+  List of schemas
+  Name  |  Owner
+--------+----------
+ public | postgres
+ test   | postgres
+(2 rows)
+
+remote_db=# IMPORT FOREIGN SCHEMA "my_schema" FROM SERVER pg_local_fs INTO test;
+IMPORT FOREIGN SCHEMA
+===================================================================
